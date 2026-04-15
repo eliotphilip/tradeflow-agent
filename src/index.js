@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { findLeadsFromCompaniesHouse } from './sources/companiesHouse.js';
 import { findLeadsFromGoogleMaps } from './sources/googleMaps.js';
 import { writeEmail, scoreLead } from './emailWriter.js';
+import { calculateDistance } from './utils/distance.js';
 
 // Init Supabase with service role key (full access)
 const supabase = createClient(
@@ -88,22 +89,45 @@ const runCampaign = async (client) => {
     console.log(`✅ Qualified leads: ${qualifiedLeads.length}`);
 
     // ----------------------------------------
-    // STEP 4: Write emails for each lead
+    // STEP 4: Calculate distances
     // ----------------------------------------
-    console.log('\n✍️  Step 3: Writing personalised emails...');
-    const leadsWithEmails = [];
+    console.log('\n📏 Step 3: Calculating distances...');
+    const leadsWithDistances = [];
 
     for (const lead of qualifiedLeads) {
+      let distance = null;
+      if (lead.address && client.location) {
+        distance = await calculateDistance(
+          client.location,
+          lead.address,
+          GOOGLE_MAPS_API_KEY
+        );
+      }
+      leadsWithDistances.push({ ...lead, distance_miles: distance });
+      await sleep(100); // small delay to avoid geocoding rate limits
+    }
+
+    // Log distance stats
+    const withDistance = leadsWithDistances.filter(l => l.distance_miles !== null);
+    console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
+
+    // ----------------------------------------
+    // STEP 5: Write emails for each lead
+    // ----------------------------------------
+    console.log('\n✍️  Step 4: Writing personalised emails...');
+    const leadsWithEmails = [];
+
+    for (const lead of leadsWithDistances) {
       const emailContent = await writeEmail(client, lead);
       leadsWithEmails.push({ ...lead, ...emailContent });
-      // Small delay to avoid rate limits
+      // Small delay to avoid Claude API rate limits
       await sleep(300);
     }
 
     // ----------------------------------------
-    // STEP 5: Save to Supabase
+    // STEP 6: Save to Supabase
     // ----------------------------------------
-    console.log('\n💾 Step 4: Saving leads to database...');
+    console.log('\n💾 Step 5: Saving leads to database...');
 
     // Save in batches of 10
     const batches = chunkArray(leadsWithEmails, 10);
@@ -125,6 +149,7 @@ const runCampaign = async (client) => {
         source_id: lead.source_id || null,
         fit_score: lead.fit_score,
         fit_reason: lead.fit_reason,
+        distance_miles: lead.distance_miles || null,
         email_subject: lead.email_subject,
         email_body: lead.email_body,
         follow_up_body: lead.follow_up_body,
@@ -148,7 +173,7 @@ const runCampaign = async (client) => {
     console.log(`✅ Saved ${savedCount} leads to database`);
 
     // ----------------------------------------
-    // STEP 6: Update campaign record
+    // STEP 7: Update campaign record
     // ----------------------------------------
     await supabase
       .from('campaigns')
