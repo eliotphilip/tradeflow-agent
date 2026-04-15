@@ -32,22 +32,32 @@ ABOUT THE LEAD (who the email is TO):
 - What we know about them: ${lead.description || 'local business'}
 
 IMPORTANT RULES:
-- Write in first person as the tradesperson
-- Sound like a REAL HUMAN wrote this, not AI
-- Keep it SHORT - 4 short paragraphs max
-- Reference something specific about the lead's business if possible
-- The recent job is social proof - use it naturally, don't force it
-- Soft CTA - suggest a quick call or chat, never a hard sell
-- Use [First Name] as placeholder if we don't have their name
-- Match the tone to the business size - sole trader = craftsman tone, larger = professional tone
-- NO buzzwords, NO "I hope this email finds you well", NO corporate speak
-- Sign off with the tradesperson's first name only
+- Write like a real tradesperson firing off a quick email between jobs — not a salesperson
+- Dry, understated tone. British. Matter of fact. No enthusiasm.
+- NEVER say things like "your work looks solid", "speaks for itself", "keen to chat", "would love to", "happy to help"
+- NO compliments about their business — it sounds fake
+- NO exclamation marks. Ever.
+- Keep it to 3 short paragraphs. Each paragraph max 2 sentences.
+- Para 1: Who you are and what you do. One sentence.
+- Para 2: One specific thing about their business that suggests they might need joinery work. No flattery.
+- Para 3: Direct ask — are they looking for a joiner, and if so you're available.
+- Sign off: just a name, no "Cheers", no "Best", no "Thanks" — just the name
+- Use [First Name] if no contact name available
+- Subject line: plain and direct, like "Joinery — [their city]" or "Available joiner — [trade type]"
+- It should read like a text message, not a cover letter
+
+EXAMPLE OF GOOD TONE:
+"I'm a joiner based in Manchester, mainly working on residential refurbs and commercial fit-outs.
+
+Noticed you do a fair amount of property development in the area — figured it was worth reaching out in case you ever need reliable joinery on a project.
+
+Currently have availability. Let me know if it's worth a conversation."
 
 Return ONLY a JSON object, no markdown, no backticks:
 {
-  "subject": "email subject line - specific and personal, not generic",
+  "subject": "email subject line - plain and direct",
   "body": "the full email body with \\n for line breaks",
-  "follow_up": "a short 2 sentence follow up to send 3 days later if no reply"
+  "follow_up": "one sentence follow up, equally dry and direct, 3 days later"
 }`;
 
   try {
