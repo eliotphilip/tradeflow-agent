@@ -1,0 +1,16 @@
+{
+  "name": "tradeflow-agent",
+  "version": "1.0.0",
+  "description": "TradeFlow lead generation agent",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node src/test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "node-fetch": "^3.3.2"
+  }
+}
