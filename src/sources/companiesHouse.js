@@ -1,54 +1,59 @@
 // src/sources/companiesHouse.js
-// Finds small UK businesses using the free Companies House API
-// No API key needed - completely free
+// Finds UK registered businesses using Companies House API
+// Uses Claude to generate smart search queries for any business type
+
+import Anthropic from '@anthropic-ai/sdk';
 
 const CH_BASE_URL = 'https://api.company-information.service.gov.uk';
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// SIC codes relevant to our target industries
-// These are the industries that hire tradespeople
-const TARGET_SIC_CODES = {
-  'property_developer': ['68100', '68201', '68209', '41100', '41201', '41202'],
-  'architect':          ['71111', '71112'],
-  'construction':       ['41100', '41201', '41202', '43210', '43220', '43290', '43310', '43320', '43330', '43341', '43342', '43390', '43910', '43999'],
-  'letting_agent':      ['68310', '68320'],
-  'facilities':         ['81100', '81210', '81220', '81290'],
-  'interior_design':    ['74100'],
-};
-
-// Map client's ideal client selections to SIC codes
-const mapClientTypesToSIC = (idealClients) => {
-  const sics = new Set();
-  idealClients.forEach(clientType => {
-    const type = clientType.toLowerCase();
-    if (type.includes('developer')) TARGET_SIC_CODES.property_developer.forEach(s => sics.add(s));
-    if (type.includes('architect'))  TARGET_SIC_CODES.architect.forEach(s => sics.add(s));
-    if (type.includes('contractor') || type.includes('construction')) TARGET_SIC_CODES.construction.forEach(s => sics.add(s));
-    if (type.includes('letting') || type.includes('agent')) TARGET_SIC_CODES.letting_agent.forEach(s => sics.add(s));
-    if (type.includes('facilities')) TARGET_SIC_CODES.facilities.forEach(s => sics.add(s));
-    if (type.includes('interior'))   TARGET_SIC_CODES.interior_design.forEach(s => sics.add(s));
-  });
-  // Default fallback
-  if (sics.size === 0) {
-    TARGET_SIC_CODES.property_developer.forEach(s => sics.add(s));
-    TARGET_SIC_CODES.construction.forEach(s => sics.add(s));
-  }
-  return Array.from(sics);
-};
-
-// Search Companies House for businesses
-const searchCompanies = async (query, location) => {
+// Ask Claude what to search for on Companies House based on client profile
+const generateSearchQueries = async (client) => {
   try {
-    const url = `${CH_BASE_URL}/search/companies?q=${encodeURIComponent(query + ' ' + location)}&items_per_page=20`;
-    
+    const prompt = `A ${client.trade} business in ${client.location} wants to find potential clients on Companies House UK.
+Their ideal clients are: ${client.ideal_clients?.join(', ') || 'local businesses'}.
+They want work in: ${client.work_types?.join(', ') || 'general work'}.
+
+Generate 4 short Companies House search queries that would find their ideal clients.
+These are keyword searches used to find UK registered company names.
+Keep each query to 2-3 words maximum.
+Return ONLY a JSON array of strings, no markdown, no explanation.
+Example: ["property developer", "letting agent", "building contractor", "facilities management"]`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const text = response.content[0].text.replace(/```json|```/g, '').trim();
+    const queries = JSON.parse(text);
+    console.log(`   🧠 Claude generated CH queries: ${queries.join(', ')}`);
+    return queries;
+  } catch (err) {
+    console.log('   ⚠️  Claude query generation failed, using fallback');
+    return ['property developer', 'building contractor', 'letting agent', 'facilities management'];
+  }
+};
+
+// Search Companies House with authentication
+const searchCompanies = async (query, location, apiKey) => {
+  try {
+    const searchTerm = `${query} ${location}`;
+    const url = `${CH_BASE_URL}/search/companies?q=${encodeURIComponent(searchTerm)}&items_per_page=20`;
+
+    // Companies House uses Basic auth with API key as username, empty password
+    const credentials = Buffer.from(`${apiKey}:`).toString('base64');
+
     const response = await fetch(url, {
       headers: {
+        'Authorization': `Basic ${credentials}`,
         'Accept': 'application/json',
-        // Companies House public search doesn't need auth
       }
     });
 
     if (!response.ok) {
-      console.log(`Companies House search failed: ${response.status}`);
+      console.log(`   Companies House search failed: ${response.status}`);
       return [];
     }
 
@@ -60,24 +65,15 @@ const searchCompanies = async (query, location) => {
   }
 };
 
-// Get detailed company info
-const getCompanyDetails = async (companyNumber) => {
+// Get company officers (directors)
+const getCompanyOfficers = async (companyNumber, apiKey) => {
   try {
-    const response = await fetch(`${CH_BASE_URL}/company/${companyNumber}`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (err) {
-    return null;
-  }
-};
-
-// Get company officers (directors) - so we know who to email
-const getCompanyOfficers = async (companyNumber) => {
-  try {
+    const credentials = Buffer.from(`${apiKey}:`).toString('base64');
     const response = await fetch(`${CH_BASE_URL}/company/${companyNumber}/officers`, {
-      headers: { 'Accept': 'application/json' }
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Accept': 'application/json',
+      }
     });
     if (!response.ok) return [];
     const data = await response.json();
@@ -87,34 +83,26 @@ const getCompanyOfficers = async (companyNumber) => {
   }
 };
 
-// Main function - finds leads from Companies House
+// Main function
 export const findLeadsFromCompaniesHouse = async (client) => {
-  console.log(`🏛️  Searching Companies House for leads in ${client.location}...`);
-  
-  const leads = [];
-  const idealClients = client.ideal_clients || ['Property developers', 'Architects'];
-  
-  // Build search queries based on client's targets
-  const searchQueries = [];
-  idealClients.forEach(type => {
-    const t = type.toLowerCase();
-    if (t.includes('developer'))  searchQueries.push('property developer');
-    if (t.includes('architect'))  searchQueries.push('architect');
-    if (t.includes('contractor')) searchQueries.push('building contractor');
-    if (t.includes('letting'))    searchQueries.push('letting agent');
-    if (t.includes('facilities')) searchQueries.push('facilities management');
-    if (t.includes('interior'))   searchQueries.push('interior design');
-    if (t.includes('landlord'))   searchQueries.push('property management');
-    if (t.includes('hotel'))      searchQueries.push('hotel');
-    if (t.includes('office') || t.includes('commercial')) searchQueries.push('commercial property');
-  });
+  const apiKey = process.env.COMPANIES_HOUSE_API_KEY;
+  if (!apiKey) {
+    console.log('⚠️  No Companies House API key — skipping');
+    return [];
+  }
 
-  // Run searches
+  console.log(`🏛️  Searching Companies House for leads in ${client.location}...`);
+
+  // Ask Claude what to search for
+  const searchQueries = await generateSearchQueries(client);
+
+  const leads = [];
   const seenNumbers = new Set();
-  
-  for (const query of searchQueries.slice(0, 4)) { // limit to 4 queries
-    const results = await searchCompanies(query, client.location);
-    
+
+  for (const query of searchQueries) {
+    console.log(`   Searching CH: "${query} ${client.location}"`);
+    const results = await searchCompanies(query, client.location, apiKey);
+
     for (const company of results) {
       if (seenNumbers.has(company.company_number)) continue;
       seenNumbers.add(company.company_number);
@@ -123,43 +111,39 @@ export const findLeadsFromCompaniesHouse = async (client) => {
       if (company.company_status !== 'active') continue;
 
       // Get directors
-      const officers = await getCompanyOfficers(company.company_number);
-      const directors = officers.filter(o => 
+      const officers = await getCompanyOfficers(company.company_number, apiKey);
+      const directors = officers.filter(o =>
         o.officer_role === 'director' && !o.resigned_on
       );
-      
-      const contactName = directors.length > 0 
+
+      const contactName = directors.length > 0
         ? formatName(directors[0].name)
         : null;
 
-      // Build lead object
       const lead = {
         business_name: company.title,
         contact_name: contactName,
         address: formatAddress(company.registered_office_address),
-        city: extractCity(company.registered_office_address, client.location),
+        city: company.registered_office_address?.locality || client.location,
         postcode: company.registered_office_address?.postal_code,
         business_type: query,
         source: 'companies_house',
         source_id: company.company_number,
-        description: `Registered ${company.company_type} company. SIC: ${company.sic_codes?.join(', ') || 'unknown'}. Incorporated ${company.date_of_creation || 'unknown'}.`,
+        description: `UK registered company. Type: ${company.company_type}. SIC: ${company.sic_codes?.join(', ') || 'unknown'}. Incorporated: ${company.date_of_creation || 'unknown'}.`,
       };
 
       leads.push(lead);
     }
 
-    // Small delay to be respectful to the API
-    await sleep(500);
+    await sleep(300);
   }
 
   console.log(`✅ Companies House found ${leads.length} potential leads`);
   return leads;
 };
 
-// Helper functions
 const formatName = (name) => {
   if (!name) return null;
-  // Companies House returns "SURNAME, Firstname"
   const parts = name.split(', ');
   if (parts.length === 2) return `${parts[1]} ${parts[0]}`;
   return name;
@@ -169,10 +153,6 @@ const formatAddress = (addr) => {
   if (!addr) return null;
   return [addr.address_line_1, addr.address_line_2, addr.locality, addr.postal_code]
     .filter(Boolean).join(', ');
-};
-
-const extractCity = (addr, fallback) => {
-  return addr?.locality || addr?.region || fallback;
 };
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
