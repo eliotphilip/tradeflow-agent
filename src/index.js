@@ -104,10 +104,9 @@ const runCampaign = async (client) => {
         );
       }
       leadsWithDistances.push({ ...lead, distance_miles: distance });
-      await sleep(100); // small delay to avoid geocoding rate limits
+      await sleep(100);
     }
 
-    // Log distance stats
     const withDistance = leadsWithDistances.filter(l => l.distance_miles !== null);
     console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
 
@@ -120,7 +119,6 @@ const runCampaign = async (client) => {
     for (const lead of leadsWithDistances) {
       const emailContent = await writeEmail(client, lead);
       leadsWithEmails.push({ ...lead, ...emailContent });
-      // Small delay to avoid Claude API rate limits
       await sleep(300);
     }
 
@@ -129,7 +127,6 @@ const runCampaign = async (client) => {
     // ----------------------------------------
     console.log('\n💾 Step 5: Saving leads to database...');
 
-    // Save in batches of 10
     const batches = chunkArray(leadsWithEmails, 10);
     let savedCount = 0;
 
@@ -186,7 +183,6 @@ const runCampaign = async (client) => {
       })
       .eq('id', campaign.id);
 
-    // Update client's last run time
     await supabase
       .from('clients')
       .update({ last_campaign_run: new Date().toISOString() })
@@ -219,7 +215,6 @@ const main = async () => {
   console.log('🔄 TradeFlow Agent Starting...');
   console.log(`   Time: ${new Date().toISOString()}`);
 
-  // Check env vars
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
     console.error('❌ Missing Supabase credentials');
     process.exit(1);
@@ -233,7 +228,6 @@ const main = async () => {
     process.exit(1);
   }
 
-  // Get all active clients with completed onboarding
   const { data: clients, error } = await supabase
     .from('clients')
     .select('*')
@@ -246,16 +240,15 @@ const main = async () => {
   }
 
   if (!clients || clients.length === 0) {
-    console.log('ℹ️  No active clients found. Add a client via the dashboard first.');
+    console.log('ℹ️  No active clients found.');
     process.exit(0);
   }
 
   console.log(`\n👥 Found ${clients.length} active client(s)`);
 
-  // Run campaign for each client
   for (const client of clients) {
     await runCampaign(client);
-    await sleep(2000); // gap between clients
+    await sleep(2000);
   }
 
   console.log('\n✅ All campaigns complete');
@@ -274,7 +267,6 @@ const chunkArray = (arr, size) => {
   return chunks;
 };
 
-// Run it
 main().catch(err => {
   console.error('Fatal error:', err);
   process.exit(1);
