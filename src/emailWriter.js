@@ -14,7 +14,6 @@ const anthropic = new Anthropic({
 // ============================================
 export const scoreLead = async (client, lead, previousApprovedLeads = [], previousArchivedLeads = []) => {
   try {
-    // Build few-shot examples from feedback loop data
     const feedbackExamples = buildFeedbackExamples(previousApprovedLeads, previousArchivedLeads);
 
     const prompt = `You are a B2B lead qualification analyst. Score this prospect for the client below.
@@ -57,7 +56,7 @@ QUALITY (max 2):
 +1 Business name/type suggests a real decision-maker exists
 
 PENALTIES:
--3 Any hard disqualifier present — near automatic low score
+-3 Any hard disqualifier present
 -2 Business is clearly irrelevant to a ${client.trade} (wrong industry entirely)
 -1 Only surface-level match with no clear need
 
@@ -70,12 +69,12 @@ Priority mapping based on volume_vs_precision=${client.volume_vs_precision || 3}
 
 PERFECT LEAD CHECK:
 Does this prospect match the client's perfect lead definition: "${client.perfect_lead_def || 'Not specified'}"?
-Return true only if it genuinely matches — not just a decent lead.
+Return true only if it genuinely matches.
 
 Return ONLY valid JSON, no markdown:
 {
   "fit_score": 0,
-  "fit_reason": "brief explanation showing the math e.g. +1 type match, +1 location, -2 irrelevant = 0",
+  "fit_reason": "brief explanation showing the math",
   "priority": "hot|warm|cold|pass",
   "top_signals": [],
   "disqualifiers_found": [],
@@ -117,47 +116,51 @@ export const writeEmail = async (client, lead) => {
   console.log(`✍️  Writing email for ${lead.business_name}...`);
 
   try {
-    const prompt = `You are a senior B2B copywriter writing a cold outreach email on behalf of a business owner.
+    // First, intelligently process the client's raw inputs
+    // The agent rewrites/improves what the client told us rather than using it verbatim
+    const clientContext = buildClientContext(client);
 
-# WHO IS SENDING THIS EMAIL
-- Business: ${client.business_name || client.trade}
-- Trade/Service: ${client.trade}
-- Location: ${client.location}
-- What makes them stand out: ${client.offering || 'Not specified'}
-- Tone preference: ${client.tone || 'Direct and to the point'}
-- Recent work example: ${client.recent_job || 'Not specified'}
-- Perfect client definition: ${client.perfect_lead_def || 'Not specified'}
+    const prompt = `You are an expert B2B copywriter. Write a cold outreach email on behalf of a small business owner.
 
-# WHO IS RECEIVING THIS EMAIL
+# ABOUT THE SENDER
+${clientContext}
+
+# ABOUT THE RECIPIENT
 - Business: ${lead.business_name}
-- Type: ${lead.business_type}
-- Location: ${lead.city || lead.address}
-- Website: ${lead.website || 'None found'}
-- What we know: ${lead.description || 'Local business'}
-- Contact name: ${lead.contact_name || 'Unknown'}
-- Is a perfect lead match: ${lead.matches_perfect_lead_def ? 'YES — mention something specific' : 'No — keep it general'}
+- Type of business: ${lead.business_type}
+- Location: ${lead.city || 'Unknown'}
+- Website: ${lead.website || 'Not available'}
+- Additional info: ${lead.description || 'Local business found via search'}
+- Contact name: ${lead.contact_name ? lead.contact_name : 'Unknown — use "Hi" as greeting'}
+- Is a perfect client match: ${lead.matches_perfect_lead_def ? 'YES' : 'No'}
 
-# WRITING RULES
-1. Write in first person as the business owner — natural, human, not corporate
-2. 3 short paragraphs maximum
-3. Para 1: One sentence — who you are and what you do
-4. Para 2: Connect their business to your service — if perfect match, be specific
-5. Para 3: Simple low-pressure ask
-6. Sign off with just the business name
-7. Subject: plain and specific e.g. "Joinery — Wolverhampton"
-8. BANNED words/phrases: "I hope this finds you well", "I came across", "I'd love to", "passionate", "game-changer", "synergy", "reach out", "touch base", "circle back", "excited to"
-9. Tone: ${client.tone || 'direct and to the point'}
-10. Under 100 words total
-11. Sound like a real person typing between jobs — not a marketing email
+# YOUR JOB
+Write a cold email that sounds like the business owner typed it themselves between jobs.
+NOT a marketing email. NOT corporate. A real person reaching out to another real person.
 
-# FOLLOW UP
-1-2 sentences, casual, 3 days later. Even shorter than the email.
+# STRICT RULES
+1. Maximum 3 short paragraphs, under 100 words total
+2. Para 1: Who you are in one sentence — trade + location + one specific thing you do well
+3. Para 2: Why you're contacting THEM specifically — reference something real about their business type, not generic flattery. If perfect match, be very specific. Never say "I came across your business"
+4. Para 3: Simple ask — available if they ever need someone, no pressure
+5. Sign off: just the business name, nothing else
+6. Subject: plain format like "Joinery — Wolverhampton" or "Joinery work — [their area]"
+7. Follow-up: 1 sentence, casual, 3 days later — just checking if email was received, no pressure at all
+
+# BANNED PHRASES — never use these
+"I hope this finds you well", "I came across your business", "I'd love to", "passionate about", 
+"game-changer", "synergy", "reach out", "touch base", "circle back", "excited to connect",
+"fancy a coffee", "grab a coffee", "pick your brain", "leverage", "going forward",
+"I was impressed by", "I love what you're doing", "amazing work"
+
+# TONE GUIDE
+${getToneGuide(client.tone)}
 
 Return ONLY valid JSON, no markdown:
 {
-  "subject": "email subject line",
-  "body": "full email body with \\n for line breaks",
-  "follow_up": "short follow up"
+  "subject": "plain subject line",
+  "body": "email body with \\n for paragraph breaks",
+  "follow_up": "one casual sentence follow up"
 }`;
 
     const response = await anthropic.messages.create({
@@ -180,7 +183,7 @@ Return ONLY valid JSON, no markdown:
     return {
       email_subject: `${client.trade} — ${client.location}`,
       email_body: `Hi,\n\nI'm a ${client.trade} based in ${client.location}.\n\nWould you be open to a quick conversation?\n\n${client.business_name || client.trade}`,
-      follow_up_body: `Just following up on my previous email. Let me know if it's worth a conversation.`,
+      follow_up_body: `Just following up on my previous message — let me know if it's worth a conversation.`,
     };
   }
 };
@@ -189,24 +192,77 @@ Return ONLY valid JSON, no markdown:
 // HELPERS
 // ============================================
 
-// Build few-shot examples from previous approved/archived leads
+// Build a rich, intelligent context block from raw client data
+// The agent improves and interprets what the client told us
+const buildClientContext = (client) => {
+  const lines = [];
+
+  lines.push(`- Name/Business: ${client.business_name || client.trade}`);
+  lines.push(`- Trade: ${client.trade}`);
+  lines.push(`- Location: ${client.location}`);
+
+  // Intelligently handle offering — improve if thin
+  if (client.offering && client.offering.length > 10) {
+    lines.push(`- What they do well: ${client.offering}`);
+  } else {
+    lines.push(`- What they do well: Reliable ${client.trade} work in ${client.location}`);
+  }
+
+  // Handle recent job — extract the key proof point
+  if (client.recent_job && client.recent_job.length > 10) {
+    lines.push(`- Recent proof point: ${client.recent_job} (use this naturally as social proof, rewrite it to sound natural — don't quote it verbatim)`);
+  }
+
+  // Work types
+  if (client.work_types?.length > 0) {
+    lines.push(`- Types of work: ${client.work_types.join(', ')}`);
+  }
+
+  // Perfect lead context
+  if (client.perfect_lead_def) {
+    lines.push(`- Their ideal client: ${client.perfect_lead_def}`);
+  }
+
+  return lines.join('\n');
+};
+
+// Convert tone preference to writing guidance
+const getToneGuide = (tone) => {
+  if (!tone) return 'Direct and professional. Short sentences. No fluff.';
+
+  const toneMap = {
+    'Direct and to the point': 'Very direct. Short sentences. No softening language. Get straight to the point.',
+    'Friendly and approachable': 'Warm but professional. Conversational. Like a friendly colleague, not a salesperson.',
+    'Professional and formal': 'Professional tone. No contractions. Clear and respectful. Slightly more formal than casual.',
+    'Peer-to-peer': 'Like texting a colleague. Very casual. Contractions fine. Short punchy sentences.',
+    'Confident and assertive': 'Confident, not arrogant. States value clearly. No hedging or apologetic language.',
+    'Understated and dry': 'Minimal. Dry. British understatement. Say less, imply more. No enthusiasm.',
+  };
+
+  // Handle comma-separated multiple tones
+  const tones = tone.split(',').map(t => t.trim());
+  const guides = tones.map(t => toneMap[t] || t).filter(Boolean);
+  return guides.join(' + ');
+};
+
+// Build few-shot examples from feedback loop data
 const buildFeedbackExamples = (approved, archived) => {
   if (approved.length === 0 && archived.length === 0) return '';
 
   let examples = '\n# CALIBRATION FROM PREVIOUS CAMPAIGNS\n';
-  examples += 'Use these to calibrate your scoring — these are real decisions this client made:\n';
+  examples += 'Use these real decisions to calibrate your scoring:\n';
 
   if (approved.length > 0) {
-    examples += '\nAPPROVED (good leads):\n';
+    examples += '\nAPPROVED (good leads this client wanted):\n';
     approved.slice(0, 5).forEach(l => {
-      examples += `- ${l.business_name} (${l.business_type}, ${l.city}) → Client approved this\n`;
+      examples += `- ${l.business_name} (${l.business_type}, ${l.city})\n`;
     });
   }
 
   if (archived.length > 0) {
-    examples += '\nARCHIVED (not relevant):\n';
+    examples += '\nARCHIVED (leads this client rejected):\n';
     archived.slice(0, 5).forEach(l => {
-      examples += `- ${l.business_name} (${l.business_type}, ${l.city}) → Client archived this\n`;
+      examples += `- ${l.business_name} (${l.business_type}, ${l.city})\n`;
     });
   }
 
