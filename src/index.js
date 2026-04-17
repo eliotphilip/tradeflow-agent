@@ -17,7 +17,7 @@ const supabase = createClient(
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // ============================================
-// MAIN PIPELINE
+// MAIN PIPELINE — runs for a single client
 // ============================================
 const runCampaign = async (client) => {
   console.log(`\n🚀 Starting campaign for ${client.business_name || client.email}`);
@@ -225,33 +225,39 @@ const main = async () => {
   }
 
   // ----------------------------------------
-  // DETERMINE WHICH CLIENTS TO RUN
-  // CLIENT_ID set = manual trigger for one client
-  // CLIENT_ID empty = scheduled run for all clients
+  // CLIENT_ID set = manual dashboard trigger (single client)
+  // CLIENT_ID empty = cron run (all active clients)
+  // ?.trim() handles empty string from optional workflow input
   // ----------------------------------------
-  const clientId = process.env.CLIENT_ID;
+  const clientId = process.env.CLIENT_ID?.trim();
+
   let clients = [];
 
   if (clientId) {
-    // Manual trigger — run ONLY this specific client
-    console.log(`\n🎯 Manual trigger — running for client: ${clientId}`);
+    // Manual trigger from dashboard — run ONLY this client
+    console.log(`\n🎯 Manual trigger — running for single client: ${clientId}`);
 
     const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('id', clientId)
       .eq('onboarding_complete', true)
-      .single();
+      .limit(1);
 
-    if (error || !data) {
-      console.error('❌ Client not found or onboarding not complete:', error?.message);
+    if (error) {
+      console.error('❌ Failed to fetch client:', error.message);
       process.exit(1);
     }
 
-    clients = [data];
+    if (!data || data.length === 0) {
+      console.error('❌ Client not found or onboarding not complete');
+      process.exit(1);
+    }
+
+    clients = data;
 
   } else {
-    // Scheduled run — process ALL active clients
+    // Cron run — process ALL active clients
     console.log(`\n📅 Scheduled run — processing all active clients`);
 
     const { data, error } = await supabase
