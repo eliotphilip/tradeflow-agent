@@ -1,17 +1,22 @@
 name: TradeFlow Campaign Runner
 
 on:
-  # Run automatically every day at 9am UTC
+  # Run automatically every day at 9am UTC for ALL clients
   schedule:
     - cron: '0 9 * * *'
-  
-  # Allow manual trigger from GitHub Actions tab
+
+  # Allow manual trigger — optionally scoped to one client
   workflow_dispatch:
+    inputs:
+      client_id:
+        description: 'Client UUID (leave empty to run for all clients)'
+        required: false
+        type: string
 
 jobs:
   run-campaign:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-         
 
       - name: Install dependencies
         run: npm install
@@ -31,4 +35,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
+          CLIENT_ID: ${{ inputs.client_id }}
         run: node src/index.js
