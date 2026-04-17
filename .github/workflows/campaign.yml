@@ -36,5 +36,5 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
-          CLIENT_ID: ${{ inputs.client_id }}
+          CLIENT_ID: ${{ github.event.inputs.client_id }}
         run: node src/index.js
