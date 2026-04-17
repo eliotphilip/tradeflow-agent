@@ -26,10 +26,7 @@ const runCampaign = async (client) => {
   // Create campaign record
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
-    .insert({
-      client_id: client.id,
-      status: 'running',
-    })
+    .insert({ client_id: client.id, status: 'running' })
     .select()
     .single();
 
@@ -80,11 +77,10 @@ const runCampaign = async (client) => {
       scoredLeads.push({ ...lead, ...score });
     }
 
-    // Only keep leads with score above 50
     const qualifiedLeads = scoredLeads
       .filter(l => l.fit_score >= 50)
       .sort((a, b) => b.fit_score - a.fit_score)
-      .slice(0, 60); // max 60 leads per campaign
+      .slice(0, 60);
 
     console.log(`✅ Qualified leads: ${qualifiedLeads.length}`);
 
@@ -111,7 +107,7 @@ const runCampaign = async (client) => {
     console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
 
     // ----------------------------------------
-    // STEP 5: Write emails for each lead
+    // STEP 5: Write emails
     // ----------------------------------------
     console.log('\n✍️  Step 4: Writing personalised emails...');
     const leadsWithEmails = [];
@@ -196,7 +192,6 @@ const runCampaign = async (client) => {
 
   } catch (err) {
     console.error('Campaign failed:', err.message);
-
     await supabase
       .from('campaigns')
       .update({
@@ -215,6 +210,7 @@ const main = async () => {
   console.log('🔄 TradeFlow Agent Starting...');
   console.log(`   Time: ${new Date().toISOString()}`);
 
+  // Check required env vars
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
     console.error('❌ Missing Supabase credentials');
     process.exit(1);
@@ -228,23 +224,56 @@ const main = async () => {
     process.exit(1);
   }
 
-  const { data: clients, error } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('onboarding_complete', true)
-    .eq('campaign_active', true);
+  // ----------------------------------------
+  // DETERMINE WHICH CLIENTS TO RUN
+  // CLIENT_ID set = manual trigger for one client
+  // CLIENT_ID empty = scheduled run for all clients
+  // ----------------------------------------
+  const clientId = process.env.CLIENT_ID;
+  let clients = [];
 
-  if (error) {
-    console.error('Failed to fetch clients:', error.message);
-    process.exit(1);
+  if (clientId) {
+    // Manual trigger — run ONLY this specific client
+    console.log(`\n🎯 Manual trigger — running for client: ${clientId}`);
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('id', clientId)
+      .eq('onboarding_complete', true)
+      .single();
+
+    if (error || !data) {
+      console.error('❌ Client not found or onboarding not complete:', error?.message);
+      process.exit(1);
+    }
+
+    clients = [data];
+
+  } else {
+    // Scheduled run — process ALL active clients
+    console.log(`\n📅 Scheduled run — processing all active clients`);
+
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('onboarding_complete', true)
+      .eq('campaign_active', true);
+
+    if (error) {
+      console.error('❌ Failed to fetch clients:', error.message);
+      process.exit(1);
+    }
+
+    clients = data || [];
   }
 
-  if (!clients || clients.length === 0) {
-    console.log('ℹ️  No active clients found.');
+  if (clients.length === 0) {
+    console.log('ℹ️  No clients to process.');
     process.exit(0);
   }
 
-  console.log(`\n👥 Found ${clients.length} active client(s)`);
+  console.log(`\n👥 Processing ${clients.length} client(s)`);
 
   for (const client of clients) {
     await runCampaign(client);
@@ -267,6 +296,7 @@ const chunkArray = (arr, size) => {
   return chunks;
 };
 
+// Run it
 main().catch(err => {
   console.error('Fatal error:', err);
   process.exit(1);
