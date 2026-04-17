@@ -8,7 +8,6 @@ import { findLeadsFromGoogleMaps } from './sources/googleMaps.js';
 import { writeEmail, scoreLead } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 
-// Init Supabase with service role key (full access)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -17,13 +16,12 @@ const supabase = createClient(
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 // ============================================
-// MAIN PIPELINE — runs for a single client
+// MAIN PIPELINE
 // ============================================
 const runCampaign = async (client) => {
   console.log(`\n🚀 Starting campaign for ${client.business_name || client.email}`);
   console.log(`   Trade: ${client.trade} | Location: ${client.location}`);
 
-  // Create campaign record
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
     .insert({ client_id: client.id, status: 'running' })
@@ -67,50 +65,89 @@ const runCampaign = async (client) => {
     console.log(`🔄 After deduplication: ${uniqueLeads.length} leads`);
 
     // ----------------------------------------
-    // STEP 3: Score and filter leads
+    // FILTER OUT LEADS WE ALREADY HAVE
     // ----------------------------------------
+    console.log('\n🔍 Checking for existing leads...');
+
+    const { data: existingLeads } = await supabase
+      .from('leads')
+      .select('business_name, city')
+      .eq('client_id', client.id);
+
+    const existingKeys = new Set(
+      (existingLeads || []).map(l =>
+        `${l.business_name?.toLowerCase()}-${l.city?.toLowerCase()}`
+      )
+    );
+
+    const newLeads = uniqueLeads.filter(lead => {
+      const key = `${lead.business_name?.toLowerCase()}-${lead.city?.toLowerCase()}`;
+      return !existingKeys.has(key);
+    });
+
+    console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already in DB — ${newLeads.length} new`);
+
+    if (newLeads.length === 0) {
+      console.log('✅ No new leads to process');
+      await supabase.from('campaigns').update({
+        status: 'complete',
+        leads_found: allLeads.length,
+        leads_qualified: 0,
+        emails_drafted: 0,
+        completed_at: new Date().toISOString(),
+      }).eq('id', campaign.id);
+      return;
+    }
+
     // ----------------------------------------
-// FILTER OUT LEADS WE ALREADY HAVE
-// ----------------------------------------
-console.log('\n🔍 Checking for existing leads...');
+    // STEP 3: Load feedback data for calibration
+    // ----------------------------------------
+    console.log('\n📚 Loading feedback data...');
 
-const { data: existingLeads } = await supabase
-  .from('leads')
-  .select('business_name, city')
-  .eq('client_id', client.id);
+    const { data: approvedLeads } = await supabase
+      .from('leads')
+      .select('business_name, business_type, city')
+      .eq('client_id', client.id)
+      .eq('status', 'approved')
+      .limit(10);
 
-const existingKeys = new Set(
-  (existingLeads || []).map(l => 
-    `${l.business_name?.toLowerCase()}-${l.city?.toLowerCase()}`
-  )
-);
+    const { data: archivedLeads } = await supabase
+      .from('leads')
+      .select('business_name, business_type, city')
+      .eq('client_id', client.id)
+      .eq('status', 'archived')
+      .limit(10);
 
-const newLeads = uniqueLeads.filter(lead => {
-  const key = `${lead.business_name?.toLowerCase()}-${lead.city?.toLowerCase()}`;
-  return !existingKeys.has(key);
-});
+    console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived leads loaded for calibration`);
 
-console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already in DB — ${newLeads.length} new`);
-    
-    console.log('\n🎯 Step 2: Scoring leads...');
+    // ----------------------------------------
+    // STEP 4: Score and filter leads
+    // ----------------------------------------
+    console.log('\n🎯 Step 3: Scoring leads...');
     const scoredLeads = [];
 
-   for (const lead of newLeads) {
-      const score = await scoreLead(client, lead);
+    for (const lead of newLeads) {
+      const score = await scoreLead(client, lead, approvedLeads || [], archivedLeads || []);
       scoredLeads.push({ ...lead, ...score });
     }
 
     const qualifiedLeads = scoredLeads
       .filter(l => l.fit_score >= 50)
-      .sort((a, b) => b.fit_score - a.fit_score)
+      .sort((a, b) => {
+        // Perfect matches first, then by score
+        if (b.matches_perfect_lead_def && !a.matches_perfect_lead_def) return 1;
+        if (a.matches_perfect_lead_def && !b.matches_perfect_lead_def) return -1;
+        return b.fit_score - a.fit_score;
+      })
       .slice(0, 60);
 
-    console.log(`✅ Qualified leads: ${qualifiedLeads.length}`);
+    const perfectMatches = qualifiedLeads.filter(l => l.matches_perfect_lead_def).length;
+    console.log(`✅ Qualified leads: ${qualifiedLeads.length} (${perfectMatches} perfect matches ⭐)`);
 
     // ----------------------------------------
-    // STEP 4: Calculate distances
+    // STEP 5: Calculate distances
     // ----------------------------------------
-    console.log('\n📏 Step 3: Calculating distances...');
+    console.log('\n📏 Step 4: Calculating distances...');
     const leadsWithDistances = [];
 
     for (const lead of qualifiedLeads) {
@@ -130,9 +167,9 @@ console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already i
     console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
 
     // ----------------------------------------
-    // STEP 5: Write emails
+    // STEP 6: Write emails
     // ----------------------------------------
-    console.log('\n✍️  Step 4: Writing personalised emails...');
+    console.log('\n✍️  Step 5: Writing personalised emails...');
     const leadsWithEmails = [];
 
     for (const lead of leadsWithDistances) {
@@ -142,9 +179,9 @@ console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already i
     }
 
     // ----------------------------------------
-    // STEP 6: Save to Supabase
+    // STEP 7: Save to Supabase
     // ----------------------------------------
-    console.log('\n💾 Step 5: Saving leads to database...');
+    console.log('\n💾 Step 6: Saving leads to database...');
 
     const batches = chunkArray(leadsWithEmails, 10);
     let savedCount = 0;
@@ -166,6 +203,7 @@ console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already i
         fit_score: lead.fit_score,
         fit_reason: lead.fit_reason,
         distance_miles: lead.distance_miles || null,
+        matches_perfect_lead_def: lead.matches_perfect_lead_def || false,
         email_subject: lead.email_subject,
         email_body: lead.email_body,
         follow_up_body: lead.follow_up_body,
@@ -189,7 +227,7 @@ console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already i
     console.log(`✅ Saved ${savedCount} leads to database`);
 
     // ----------------------------------------
-    // STEP 7: Update campaign record
+    // STEP 8: Update campaign record
     // ----------------------------------------
     await supabase
       .from('campaigns')
@@ -210,6 +248,7 @@ console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already i
     console.log(`\n🎉 Campaign complete!`);
     console.log(`   Found: ${allLeads.length} leads`);
     console.log(`   Qualified: ${qualifiedLeads.length} leads`);
+    console.log(`   Perfect matches: ${perfectMatches} ⭐`);
     console.log(`   Emails drafted: ${leadsWithEmails.length}`);
     console.log(`   Saved to dashboard: ${savedCount}`);
 
@@ -233,33 +272,21 @@ const main = async () => {
   console.log('🔄 TradeFlow Agent Starting...');
   console.log(`   Time: ${new Date().toISOString()}`);
 
-  // Check required env vars
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-    console.error('❌ Missing Supabase credentials');
-    process.exit(1);
+    console.error('❌ Missing Supabase credentials'); process.exit(1);
   }
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('❌ Missing Anthropic API key');
-    process.exit(1);
+    console.error('❌ Missing Anthropic API key'); process.exit(1);
   }
   if (!process.env.GOOGLE_MAPS_API_KEY) {
-    console.error('❌ Missing Google Maps API key');
-    process.exit(1);
+    console.error('❌ Missing Google Maps API key'); process.exit(1);
   }
 
-  // ----------------------------------------
-  // CLIENT_ID set = manual dashboard trigger (single client)
-  // CLIENT_ID empty = cron run (all active clients)
-  // ?.trim() handles empty string from optional workflow input
-  // ----------------------------------------
   const clientId = process.env.CLIENT_ID?.trim();
-
   let clients = [];
 
   if (clientId) {
-    // Manual trigger from dashboard — run ONLY this client
     console.log(`\n🎯 Manual trigger — running for single client: ${clientId}`);
-
     const { data, error } = await supabase
       .from('clients')
       .select('*')
@@ -267,40 +294,23 @@ const main = async () => {
       .eq('onboarding_complete', true)
       .limit(1);
 
-    if (error) {
-      console.error('❌ Failed to fetch client:', error.message);
-      process.exit(1);
-    }
-
-    if (!data || data.length === 0) {
-      console.error('❌ Client not found or onboarding not complete');
-      process.exit(1);
-    }
-
+    if (error) { console.error('❌ Failed to fetch client:', error.message); process.exit(1); }
+    if (!data || data.length === 0) { console.error('❌ Client not found or onboarding not complete'); process.exit(1); }
     clients = data;
 
   } else {
-    // Cron run — process ALL active clients
     console.log(`\n📅 Scheduled run — processing all active clients`);
-
     const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('onboarding_complete', true)
       .eq('campaign_active', true);
 
-    if (error) {
-      console.error('❌ Failed to fetch clients:', error.message);
-      process.exit(1);
-    }
-
+    if (error) { console.error('❌ Failed to fetch clients:', error.message); process.exit(1); }
     clients = data || [];
   }
 
-  if (clients.length === 0) {
-    console.log('ℹ️  No clients to process.');
-    process.exit(0);
-  }
+  if (clients.length === 0) { console.log('ℹ️  No clients to process.'); process.exit(0); }
 
   console.log(`\n👥 Processing ${clients.length} client(s)`);
 
@@ -325,7 +335,6 @@ const chunkArray = (arr, size) => {
   return chunks;
 };
 
-// Run it
 main().catch(err => {
   console.error('Fatal error:', err);
   process.exit(1);
