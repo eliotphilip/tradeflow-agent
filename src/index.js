@@ -69,10 +69,33 @@ const runCampaign = async (client) => {
     // ----------------------------------------
     // STEP 3: Score and filter leads
     // ----------------------------------------
+    // ----------------------------------------
+// FILTER OUT LEADS WE ALREADY HAVE
+// ----------------------------------------
+console.log('\n🔍 Checking for existing leads...');
+
+const { data: existingLeads } = await supabase
+  .from('leads')
+  .select('business_name, city')
+  .eq('client_id', client.id);
+
+const existingKeys = new Set(
+  (existingLeads || []).map(l => 
+    `${l.business_name?.toLowerCase()}-${l.city?.toLowerCase()}`
+  )
+);
+
+const newLeads = uniqueLeads.filter(lead => {
+  const key = `${lead.business_name?.toLowerCase()}-${lead.city?.toLowerCase()}`;
+  return !existingKeys.has(key);
+});
+
+console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already in DB — ${newLeads.length} new`);
+    
     console.log('\n🎯 Step 2: Scoring leads...');
     const scoredLeads = [];
 
-    for (const lead of uniqueLeads) {
+   for (const lead of newLeads) {
       const score = await scoreLead(client, lead);
       scoredLeads.push({ ...lead, ...score });
     }
