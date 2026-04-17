@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { findLeadsFromCompaniesHouse } from './sources/companiesHouse.js';
 import { findLeadsFromGoogleMaps } from './sources/googleMaps.js';
+import { findLeadsFromYell } from './sources/yell.js';
 import { writeEmail, scoreLead } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 
@@ -39,20 +40,23 @@ const runCampaign = async (client) => {
     // ----------------------------------------
     console.log('\n📍 Step 1: Finding leads...');
 
-    const [chLeads, gmLeads] = await Promise.allSettled([
+    const [chLeads, gmLeads, yellLeads] = await Promise.allSettled([
       findLeadsFromCompaniesHouse(client),
       findLeadsFromGoogleMaps(client, GOOGLE_MAPS_API_KEY),
+      findLeadsFromYell(client),
     ]);
 
     const allLeads = [
       ...(chLeads.status === 'fulfilled' ? chLeads.value : []),
       ...(gmLeads.status === 'fulfilled' ? gmLeads.value : []),
+      ...(yellLeads.status === 'fulfilled' ? yellLeads.value : []),
     ];
 
     console.log(`\n📊 Total leads found: ${allLeads.length}`);
+    console.log(`   CH: ${chLeads.status === 'fulfilled' ? chLeads.value.length : 0} | Maps: ${gmLeads.status === 'fulfilled' ? gmLeads.value.length : 0} | Yell: ${yellLeads.status === 'fulfilled' ? yellLeads.value.length : 0}`);
 
     // ----------------------------------------
-    // STEP 2: Deduplicate
+    // STEP 2: Deduplicate across all sources
     // ----------------------------------------
     const seen = new Set();
     const uniqueLeads = allLeads.filter(lead => {
@@ -65,7 +69,7 @@ const runCampaign = async (client) => {
     console.log(`🔄 After deduplication: ${uniqueLeads.length} leads`);
 
     // ----------------------------------------
-    // FILTER OUT LEADS WE ALREADY HAVE
+    // STEP 3: Filter out existing leads
     // ----------------------------------------
     console.log('\n🔍 Checking for existing leads...');
 
@@ -100,7 +104,7 @@ const runCampaign = async (client) => {
     }
 
     // ----------------------------------------
-    // STEP 3: Load feedback data for calibration
+    // STEP 4: Load feedback data
     // ----------------------------------------
     console.log('\n📚 Loading feedback data...');
 
@@ -118,10 +122,10 @@ const runCampaign = async (client) => {
       .eq('status', 'archived')
       .limit(10);
 
-    console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived leads loaded for calibration`);
+    console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived for calibration`);
 
     // ----------------------------------------
-    // STEP 4: Score and filter leads
+    // STEP 5: Score and filter leads
     // ----------------------------------------
     console.log('\n🎯 Step 3: Scoring leads...');
     const scoredLeads = [];
@@ -134,7 +138,6 @@ const runCampaign = async (client) => {
     const qualifiedLeads = scoredLeads
       .filter(l => l.fit_score >= 50)
       .sort((a, b) => {
-        // Perfect matches first, then by score
         if (b.matches_perfect_lead_def && !a.matches_perfect_lead_def) return 1;
         if (a.matches_perfect_lead_def && !b.matches_perfect_lead_def) return -1;
         return b.fit_score - a.fit_score;
@@ -145,7 +148,7 @@ const runCampaign = async (client) => {
     console.log(`✅ Qualified leads: ${qualifiedLeads.length} (${perfectMatches} perfect matches ⭐)`);
 
     // ----------------------------------------
-    // STEP 5: Calculate distances
+    // STEP 6: Calculate distances
     // ----------------------------------------
     console.log('\n📏 Step 4: Calculating distances...');
     const leadsWithDistances = [];
@@ -160,14 +163,14 @@ const runCampaign = async (client) => {
         );
       }
       leadsWithDistances.push({ ...lead, distance_miles: distance });
-      await sleep(100);
+      await sleep(150); // slightly longer delay for geocoding
     }
 
     const withDistance = leadsWithDistances.filter(l => l.distance_miles !== null);
     console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
 
     // ----------------------------------------
-    // STEP 6: Write emails
+    // STEP 7: Write emails
     // ----------------------------------------
     console.log('\n✍️  Step 5: Writing personalised emails...');
     const leadsWithEmails = [];
@@ -179,7 +182,7 @@ const runCampaign = async (client) => {
     }
 
     // ----------------------------------------
-    // STEP 7: Save to Supabase
+    // STEP 8: Save to Supabase
     // ----------------------------------------
     console.log('\n💾 Step 6: Saving leads to database...');
 
@@ -227,7 +230,7 @@ const runCampaign = async (client) => {
     console.log(`✅ Saved ${savedCount} leads to database`);
 
     // ----------------------------------------
-    // STEP 8: Update campaign record
+    // STEP 9: Update campaign record
     // ----------------------------------------
     await supabase
       .from('campaigns')
@@ -250,7 +253,7 @@ const runCampaign = async (client) => {
     console.log(`   Qualified: ${qualifiedLeads.length} leads`);
     console.log(`   Perfect matches: ${perfectMatches} ⭐`);
     console.log(`   Emails drafted: ${leadsWithEmails.length}`);
-    console.log(`   Saved to dashboard: ${savedCount}`);
+    console.log(`   Saved: ${savedCount}`);
 
   } catch (err) {
     console.error('Campaign failed:', err.message);
@@ -295,7 +298,7 @@ const main = async () => {
       .limit(1);
 
     if (error) { console.error('❌ Failed to fetch client:', error.message); process.exit(1); }
-    if (!data || data.length === 0) { console.error('❌ Client not found or onboarding not complete'); process.exit(1); }
+    if (!data || data.length === 0) { console.error('❌ Client not found'); process.exit(1); }
     clients = data;
 
   } else {
