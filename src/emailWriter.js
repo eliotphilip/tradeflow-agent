@@ -157,7 +157,19 @@ ${enrichmentSection}
 2. Para 1: Who you are — trade + location + one specific thing you do well
 3. Para 2: Why contacting THEM — use a specific detail from their website if available. If enrichment has personalization_hooks, use the best one. Never say "I came across your business"
 4. Para 3: Simple low-pressure ask
-5. Sign off: just the business name
+5. Sign off — always end the email with:
+[Business name]
+[Phone number]
+[Email address]  
+[Website]
+[Business address]
+
+Use these exact values:
+Phone: ${sanitize(client.phone) || 'not provided'}
+Email: ${sanitize(client.reply_email) || 'not provided'}
+Website: ${sanitize(client.website) || ''}
+Address: ${sanitize(client.business_address) || ''}
+Only include fields that have actual values — skip any that are null or not provided.
 6. Subject: plain format like "Joinery - Wolverhampton"
 7. Follow-up: 1 sentence, casual, 3 days later
 
