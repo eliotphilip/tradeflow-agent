@@ -154,8 +154,8 @@ ${enrichmentSection}
 
 # WRITING RULES
 1. Max 3 short paragraphs, under 100 words total
-2. Para 1: Who you are — trade + location + one specific thing you do well
-3. Para 2: Why contacting THEM — use a specific detail from their website if available. If enrichment has personalization_hooks, use the best one. Never say "I came across your business"
+2. Para 1: MUST start with "Hi, we are [business name]," — then one sentence about trade + location + one specific thing you do well
+3. Para 2: MUST reference something specific from the enrichment data — use personalization_hooks if available, or their services/specialisms/recent projects. Never write a generic sentence about their industry. If enrichment has a source_quote, reference that angle naturally without quoting it directly.
 4. Para 3: Simple low-pressure ask
 5. Sign off — always end the email with:
 [Business name]
