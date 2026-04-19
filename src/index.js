@@ -9,6 +9,7 @@ import { findLeadsFromYell } from './sources/yell.js';
 import { writeEmail, scoreLead } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 import { enrichLeadsBatch } from './enrichment/firecrawl.js';
+import { enhanceClientProfile } from './utils/enhanceClient.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -21,9 +22,16 @@ const FIRECRAWL_ENABLED = !!process.env.FIRECRAWL_API_KEY;
 // ============================================
 // MAIN PIPELINE
 // ============================================
-const runCampaign = async (client) => {
-  console.log(`\n🚀 Starting campaign for ${client.business_name || client.email}`);
-  console.log(`   Trade: ${client.trade} | Location: ${client.location}`);
+const runCampaign = async (rawClient) => {
+  console.log(`\n🚀 Starting campaign for ${rawClient.business_name || rawClient.email}`);
+  console.log(`   Trade: ${rawClient.trade} | Location: ${rawClient.location}`);
+
+  // ----------------------------------------
+  // STEP 0: Enhance client profile
+  // Fixes grammar, improves vague descriptions
+  // Uses enhanced version for all downstream steps
+  // ----------------------------------------
+  const client = await enhanceClientProfile(rawClient);
 
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
@@ -137,7 +145,6 @@ const runCampaign = async (client) => {
       scoredLeads.push({ ...lead, ...score });
     }
 
-    // Get plausible leads with websites for enrichment
     const enrichmentCandidates = scoredLeads.filter(
       l => l.fit_score >= 50 && l.website
     );
@@ -145,7 +152,7 @@ const runCampaign = async (client) => {
     console.log(`   Initial pass: ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites`);
 
     // ----------------------------------------
-    // STEP 6: Firecrawl enrichment (if enabled)
+    // STEP 6: Firecrawl enrichment
     // ----------------------------------------
     let enrichedLeads = scoredLeads;
 
@@ -159,7 +166,6 @@ const runCampaign = async (client) => {
       let successCount = 0;
       let cacheHits = 0;
 
-      // Merge enrichment data back into scored leads
       enrichedLeads = scoredLeads.map(lead => {
         const enrichment = enrichmentResults.get(lead.business_name);
         if (!enrichment) return lead;
@@ -168,7 +174,6 @@ const runCampaign = async (client) => {
           if (enrichment.from_cache) cacheHits++;
           else successCount++;
 
-          // Update email from enrichment if found
           const emailFromEnrichment = enrichment.enrichment_data?.contact?.email;
 
           return {
