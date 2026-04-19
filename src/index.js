@@ -10,6 +10,8 @@ import { writeEmail, scoreLead } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 import { enrichLeadsBatch } from './enrichment/firecrawl.js';
 import { enhanceClientProfile } from './utils/enhanceClient.js';
+import { EventEmitter } from 'events';
+EventEmitter.defaultMaxListeners = 20;
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
