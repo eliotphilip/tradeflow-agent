@@ -56,7 +56,7 @@ const runCampaign = async (client) => {
     console.log(`   CH: ${chLeads.status === 'fulfilled' ? chLeads.value.length : 0} | Maps: ${gmLeads.status === 'fulfilled' ? gmLeads.value.length : 0} | Yell: ${yellLeads.status === 'fulfilled' ? yellLeads.value.length : 0}`);
 
     // ----------------------------------------
-    // STEP 2: Deduplicate across all sources
+    // STEP 2: Deduplicate
     // ----------------------------------------
     const seen = new Set();
     const uniqueLeads = allLeads.filter(lead => {
@@ -148,26 +148,34 @@ const runCampaign = async (client) => {
     console.log(`✅ Qualified leads: ${qualifiedLeads.length} (${perfectMatches} perfect matches ⭐)`);
 
     // ----------------------------------------
-    // STEP 6: Calculate distances
+    // STEP 6: Calculate distances (location-based businesses only)
     // ----------------------------------------
-    console.log('\n📏 Step 4: Calculating distances...');
-    const leadsWithDistances = [];
+    const isLocationBased = client.location_radius && client.location_radius < 100;
+    let leadsWithDistances = [];
 
-    for (const lead of qualifiedLeads) {
-      let distance = null;
-      if (lead.address && client.location) {
-        distance = await calculateDistance(
-          client.location,
-          lead.address,
-          GOOGLE_MAPS_API_KEY
-        );
+    if (isLocationBased) {
+      console.log(`\n📏 Step 4: Calculating distances (radius: ${client.location_radius} miles)...`);
+
+      for (const lead of qualifiedLeads) {
+        let distance = null;
+        if (lead.address && client.location) {
+          distance = await calculateDistance(
+            client.location,
+            lead.address,
+            GOOGLE_MAPS_API_KEY
+          );
+        }
+        leadsWithDistances.push({ ...lead, distance_miles: distance });
+        await sleep(150);
       }
-      leadsWithDistances.push({ ...lead, distance_miles: distance });
-      await sleep(150); // slightly longer delay for geocoding
-    }
 
-    const withDistance = leadsWithDistances.filter(l => l.distance_miles !== null);
-    console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
+      const withDistance = leadsWithDistances.filter(l => l.distance_miles !== null);
+      console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
+
+    } else {
+      console.log('\n📏 Step 4: Skipping distances — nationwide or no radius set');
+      leadsWithDistances = qualifiedLeads.map(l => ({ ...l, distance_miles: null }));
+    }
 
     // ----------------------------------------
     // STEP 7: Write emails
@@ -230,7 +238,7 @@ const runCampaign = async (client) => {
     console.log(`✅ Saved ${savedCount} leads to database`);
 
     // ----------------------------------------
-    // STEP 9: Update campaign record
+    // STEP 9: Update records
     // ----------------------------------------
     await supabase
       .from('campaigns')
