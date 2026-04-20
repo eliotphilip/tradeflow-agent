@@ -202,6 +202,11 @@ const buildIdentity = (client) => {
   const location = sanitize(client.location);
   const isLocal = client.location_radius && client.location_radius < 100;
 
+  // website_summary is the most specific description — use it as primary context
+  const workDescription = client.website_summary && client.website_summary.length > 10
+    ? sanitize(client.website_summary)
+    : null;
+
   const offering = client.offering && client.offering.length > 10
     ? sanitize(client.offering)
     : `${trade} work`;
@@ -220,9 +225,11 @@ const buildIdentity = (client) => {
 
   const toneDescription = getToneDescription(client.tone);
 
-  return `You are ${name} — a ${trade}. ${offering}. ${geography}
+  return `You are ${name} — a ${trade} based in ${location}.
+${workDescription ? `This is how you describe your own work: "${workDescription}"` : `You do: ${offering}.`}
 ${workTypes}
 ${recentWork}
+${geography}
 
 You are writing a short professional email to introduce yourself to a potential client.
 
