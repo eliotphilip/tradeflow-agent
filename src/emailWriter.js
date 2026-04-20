@@ -219,9 +219,7 @@ const buildIdentity = (client) => {
     ? `You typically work on: ${client.work_types.map(sanitize).join(', ')}.`
     : '';
 
-  const geography = isLocal
-    ? `You are based in ${location} and work within a ${client.location_radius} mile radius.`
-    : `You are based in ${location} and work nationally.`;
+ const geography = `You are based in ${location}.`;
 
   const toneDescription = getToneDescription(client.tone);
 
