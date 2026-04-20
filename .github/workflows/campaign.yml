@@ -1,11 +1,10 @@
 name: TradeFlow Campaign Runner
 
 on:
+  # Auto-run disabled — uncomment to re-enable daily 9am runs
   # schedule:
   #   - cron: '0 9 * * *'
-  workflow_dispatch:
 
-  # Allow manual trigger — optionally scoped to one client
   workflow_dispatch:
     inputs:
       client_id:
