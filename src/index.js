@@ -3,6 +3,7 @@
 // Called by GitHub Actions on a schedule or manually
 
 import { createClient } from '@supabase/supabase-js';
+import { EventEmitter } from 'events';
 import { findLeadsFromCompaniesHouse } from './sources/companiesHouse.js';
 import { findLeadsFromGoogleMaps } from './sources/googleMaps.js';
 import { findLeadsFromYell } from './sources/yell.js';
@@ -10,7 +11,9 @@ import { writeEmail, scoreLead } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 import { enrichLeadsBatch } from './enrichment/firecrawl.js';
 import { enhanceClientProfile } from './utils/enhanceClient.js';
-import { EventEmitter } from 'events';
+import { classifyTrade, isNationwide } from './utils/classifyTrade.js';
+
+// Prevent MaxListenersExceeded warning from concurrent Firecrawl requests
 EventEmitter.defaultMaxListeners = 20;
 
 const supabase = createClient(
@@ -30,10 +33,16 @@ const runCampaign = async (rawClient) => {
 
   // ----------------------------------------
   // STEP 0: Enhance client profile
-  // Fixes grammar, improves vague descriptions
-  // Uses enhanced version for all downstream steps
   // ----------------------------------------
   const client = await enhanceClientProfile(rawClient);
+
+  // ----------------------------------------
+  // STEP 0B: Classify trade and determine search strategy
+  // ----------------------------------------
+  const tradeClassification = await classifyTrade(client.trade);
+  const nationwide = isNationwide(client, tradeClassification);
+
+  console.log(`   Trade type: ${tradeClassification} | Search mode: ${nationwide ? '🌍 nationwide' : `📍 local (${client.location_radius || 20} miles)`}`);
 
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
@@ -53,8 +62,8 @@ const runCampaign = async (rawClient) => {
     console.log('\n📍 Step 1: Finding leads...');
 
     const [chLeads, gmLeads, yellLeads] = await Promise.allSettled([
-      findLeadsFromCompaniesHouse(client),
-      findLeadsFromGoogleMaps(client, GOOGLE_MAPS_API_KEY),
+      findLeadsFromCompaniesHouse(client, nationwide),
+      findLeadsFromGoogleMaps(client, GOOGLE_MAPS_API_KEY, nationwide),
       findLeadsFromYell(client),
     ]);
 
@@ -137,7 +146,7 @@ const runCampaign = async (rawClient) => {
     console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived for calibration`);
 
     // ----------------------------------------
-    // STEP 5: Initial scoring (thin data)
+    // STEP 5: Initial scoring
     // ----------------------------------------
     console.log('\n🎯 Step 3: Initial scoring...');
     const scoredLeads = [];
@@ -195,7 +204,7 @@ const runCampaign = async (rawClient) => {
 
       console.log(`   ✅ Enriched: ${successCount} new scrapes, ${cacheHits} from cache`);
 
-      // Re-score enriched leads with richer data
+      // Re-score enriched leads
       console.log('   🔄 Re-scoring enriched leads...');
       const reScored = [];
 
@@ -235,10 +244,11 @@ const runCampaign = async (rawClient) => {
     // ----------------------------------------
     // STEP 8: Calculate distances
     // ----------------------------------------
-    const isLocationBased = client.location_radius && client.location_radius < 100;
+    // Skip distance for nationwide searches or remote-capable trades
+    const shouldCalculateDistance = !nationwide && tradeClassification === 'local_only' && client.location_radius;
     let leadsWithDistances = [];
 
-    if (isLocationBased) {
+    if (shouldCalculateDistance) {
       console.log(`\n📏 Step 5: Calculating distances (radius: ${client.location_radius} miles)...`);
 
       for (const lead of qualifiedLeads) {
@@ -258,7 +268,8 @@ const runCampaign = async (rawClient) => {
       console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
 
     } else {
-      console.log('\n📏 Step 5: Skipping distances — nationwide business');
+      const reason = nationwide ? 'nationwide search' : 'remote-capable trade';
+      console.log(`\n📏 Step 5: Skipping distances — ${reason}`);
       leadsWithDistances = qualifiedLeads.map(l => ({ ...l, distance_miles: null }));
     }
 
