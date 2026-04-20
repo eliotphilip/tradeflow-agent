@@ -284,7 +284,7 @@ const buildRecipientContext = (lead) => {
           lines.push(`- ${sanitize(h.hook)}${h.source_quote ? ` (their words: "${sanitize(h.source_quote)}")` : ''}`);
         }
       });
-      lines.push(`Important: reference the angle, not the quote. Make it feel like something you noticed, not something you read.`);
+      lines.push(`Important: reference the angle, not the quote. Make it feel like something you noticed, not something you read. Avoid referencing highly technical, regulatory or compliance-specific language from their website (e.g. RAMS, ISO certifications, H&S policies). These make the email feel like you scraped their site. Instead reference what they actually do or build.`);
     }
   } else {
     lines.push(`- No website data available`);
