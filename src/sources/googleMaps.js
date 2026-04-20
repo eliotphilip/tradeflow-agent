@@ -1,27 +1,31 @@
 // src/sources/googleMaps.js
-// Finds local businesses using Google Maps Places API
-// Uses Claude to generate smart search queries for any business type
+// Finds leads using Google Maps Places API
+// Adapts search strategy based on trade classification and location radius
 
 import Anthropic from '@anthropic-ai/sdk';
 
 const MAPS_BASE_URL = 'https://maps.googleapis.com/maps/api';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Ask Claude what to search for on Google Maps based on client profile
-const generateSearchQueries = async (client) => {
+// Ask Claude what to search for based on client profile and search mode
+const generateSearchQueries = async (client, nationwide) => {
   try {
-    const prompt = `A ${client.trade} business in ${client.location} wants to find potential clients using Google Maps.
+    const locationContext = nationwide
+      ? `They work nationwide across the UK — do not include any specific city in the queries.`
+      : `They are based in ${client.location} and work within ${client.location_radius || 20} miles.`;
+
+    const prompt = `A ${client.trade} business wants to find potential clients using Google Maps searches.
+${locationContext}
 Their ideal clients are: ${client.ideal_clients?.join(', ') || 'local businesses'}.
 They want work in: ${client.work_types?.join(', ') || 'general work'}.
-Their minimum job value is: ${client.min_job_value || 'flexible'}.
 
-Generate 5 Google Maps search queries that would find their ideal clients in ${client.location}.
-Think about what types of businesses would actually hire a ${client.trade}.
-Be specific and realistic — these need to return real results on Google Maps.
-Return ONLY a JSON array of strings, no markdown, no explanation.
-Example for a joiner: ["property developer", "architect", "letting agent", "building contractor", "facilities management"]
-Example for a mobile hairdresser: ["wedding venue", "hotel", "beauty salon", "spa", "events venue"]
-Example for an accountant: ["small business", "startup", "business centre", "solicitor", "financial services"]`;
+Generate 5 Google Maps search queries to find their ideal clients.
+Think carefully about what types of businesses would realistically hire a ${client.trade}.
+${nationwide ? 'Since this is nationwide, focus on business TYPE only — no city names.' : 'Keep queries short and do NOT include the city name — we add that separately.'}
+
+Return ONLY a JSON array of short strings (2-4 words each), no markdown, no city names:
+Example for joiner: ["property developer", "architect", "building contractor", "letting agent", "housing association"]
+Example for web designer: ["ecommerce business", "marketing agency", "retail brand", "startup company", "hospitality group"]`;
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -34,22 +38,23 @@ Example for an accountant: ["small business", "startup", "business centre", "sol
     console.log(`   🧠 Claude generated Maps queries: ${queries.join(', ')}`);
     return queries;
   } catch (err) {
-    console.log('   ⚠️  Claude query generation failed, using fallback');
-    return ['local business', 'company', 'office', 'commercial property', 'business park'];
+    console.log('   ⚠️  Maps query generation failed, using fallback');
+    return ['local business', 'company', 'office', 'commercial property', 'business centre'];
   }
 };
 
 // Search Google Maps Places API
-const searchPlaces = async (query, location, apiKey) => {
+const searchPlaces = async (query, location, apiKey, nationwide) => {
   try {
-    const searchTerm = `${query} in ${location}`;
-    const url = `${MAPS_BASE_URL}/place/textsearch/json?query=${encodeURIComponent(searchTerm)}&type=establishment&key=${apiKey}`;
+    // For nationwide searches, don't restrict to a specific location
+    const searchTerm = nationwide
+      ? `${query} UK`
+      : `${query} near ${location}`;
+
+    const url = `${MAPS_BASE_URL}/place/textsearch/json?query=${encodeURIComponent(searchTerm)}&key=${apiKey}`;
 
     const response = await fetch(url);
-    if (!response.ok) {
-      console.log(`   Google Maps search failed: ${response.status}`);
-      return [];
-    }
+    if (!response.ok) return [];
 
     const data = await response.json();
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
@@ -69,10 +74,8 @@ const getPlaceDetails = async (placeId, apiKey) => {
   try {
     const fields = 'name,formatted_address,formatted_phone_number,website,business_status';
     const url = `${MAPS_BASE_URL}/place/details/json?place_id=${placeId}&fields=${fields}&key=${apiKey}`;
-
     const response = await fetch(url);
     if (!response.ok) return null;
-
     const data = await response.json();
     return data.result || null;
   } catch (err) {
@@ -81,26 +84,28 @@ const getPlaceDetails = async (placeId, apiKey) => {
 };
 
 // Main function
-export const findLeadsFromGoogleMaps = async (client, apiKey) => {
-  console.log(`🗺️  Searching Google Maps for leads in ${client.location}...`);
+export const findLeadsFromGoogleMaps = async (client, apiKey, nationwide = false) => {
+  if (nationwide) {
+    console.log(`🗺️  Searching Google Maps nationwide for ${client.trade} leads...`);
+  } else {
+    console.log(`🗺️  Searching Google Maps for leads in ${client.location}...`);
+  }
 
-  // Ask Claude what to search for
-  const queries = await generateSearchQueries(client);
-
+  const queries = await generateSearchQueries(client, nationwide);
   const leads = [];
   const seenPlaceIds = new Set();
 
   for (const query of queries) {
-    console.log(`   Searching Maps: "${query} in ${client.location}"`);
-    const results = await searchPlaces(query, client.location, apiKey);
+    const searchLabel = nationwide ? `${query} UK` : `${query} near ${client.location}`;
+    console.log(`   Searching Maps: "${searchLabel}"`);
+
+    const results = await searchPlaces(query, client.location, apiKey, nationwide);
 
     for (const place of results.slice(0, 10)) {
       if (seenPlaceIds.has(place.place_id)) continue;
       seenPlaceIds.add(place.place_id);
-
       if (place.business_status && place.business_status !== 'OPERATIONAL') continue;
 
-      // Get full details
       const details = await getPlaceDetails(place.place_id, apiKey);
       await sleep(200);
 
