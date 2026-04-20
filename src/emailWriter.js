@@ -1,7 +1,7 @@
 // src/emailWriter.js
 // Two-stage lead qualification and email writing system
 // Stage 1: Score and qualify the lead (Haiku)
-// Stage 2: Write personalised outreach using enrichment data (Haiku)
+// Stage 2: Write email AS the business owner — professional, human, no waffle
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -130,55 +130,36 @@ export const writeEmail = async (client, lead) => {
   console.log(`✍️  Writing email for ${lead.business_name}...`);
 
   try {
-    const clientContext = buildClientContext(client);
-    const hasEnrichment = !!lead.enrichment_data;
-    const enrichmentSection = hasEnrichment
-      ? buildEmailEnrichmentSection(lead.enrichment_data)
-      : null;
-
-    // Build the personalisation instruction based on what data we have
-    const personalisationInstruction = buildPersonalisationInstruction(lead, enrichmentSection);
-
-    // Build sign-off from client contact details
+    const identity = buildIdentity(client);
+    const recipientContext = buildRecipientContext(lead);
     const signOff = buildSignOff(client);
 
-    const prompt = `You are an expert B2B copywriter writing a cold outreach email for a small business owner.
+    const prompt = `${identity}
 
-# ABOUT THE SENDER
-${clientContext}
+You are writing a short email to ${sanitize(lead.business_name)}.
 
-# ABOUT THE RECIPIENT
-- Business: ${sanitize(lead.business_name)}
-- Type: ${sanitize(lead.business_type)}
-- Location: ${sanitize(lead.city) || 'Unknown'}
-- Contact: ${lead.contact_name ? sanitize(lead.contact_name) : 'Unknown'}
-- Is perfect match: ${lead.matches_perfect_lead_def ? 'YES' : 'No'}
+${recipientContext}
 
-${personalisationInstruction}
+Write the email now. 3 short paragraphs. Under 80 words for the body.
 
-# STRICT WRITING RULES
-1. Max 3 short paragraphs, under 100 words for the body
-2. Para 1: MUST open with "Hi, we are [business name]," — then one sentence: trade + location + one specific differentiator
-3. Para 2: MUST be specific to THIS business — use the personalisation instruction above. Never write generic industry observations
-4. Para 3: One simple low-pressure ask — "would it be worth a quick conversation" style
-5. End with this exact sign-off on new lines:
+First line must be: "Hi, we are ${sanitize(client.business_name || client.trade)}," — always "Hi," never "Hi [name],"
+
+Second paragraph: why you are contacting THIS specific business.${lead.enrichment_data ? ' You have real information about them from their website — use it. Reference something specific. Do not make general observations about their industry.' : ' Be realistic about what they likely need — do not make things up.'}
+
+Third paragraph: one simple, low-pressure ask.
+
+End with:
 ${signOff}
-6. Subject: plain format like "Joinery - Wolverhampton"
-7. Follow-up: 1 casual sentence, 3 days later, no pressure
 
-BANNED PHRASES: "I hope this finds you well", "I came across", "I would love to",
-"passionate", "game-changer", "synergy", "reach out", "touch base", "circle back",
-"excited to connect", "fancy a coffee", "grab a coffee", "pick your brain",
-"amazing work", "our work speaks for itself", "quality is non-negotiable",
-"I was impressed by", "I love what you are doing"
+Subject: plain and specific, like "Joinery - Wolverhampton" or "${sanitize(client.trade)} - ${sanitize(lead.city || client.location)}"
 
-TONE: ${getToneGuide(client.tone)}
+Follow-up: one sentence to send 3 days later if no reply. Brief and natural.
 
 Return ONLY valid JSON, double quotes only:
 {
-  "subject": "plain subject line",
-  "body": "full email including sign-off, use \\n for line breaks",
-  "follow_up": "one casual sentence"
+  "subject": "subject line",
+  "body": "full email with \\n for line breaks, including sign-off",
+  "follow_up": "one sentence follow up"
 }`;
 
     const response = await anthropic.messages.create({
@@ -205,8 +186,8 @@ Return ONLY valid JSON, double quotes only:
     console.error(`Email writing failed for ${lead.business_name}:`, err.message);
     return {
       email_subject: `${client.trade} - ${client.location}`,
-      email_body: `Hi, we are ${client.business_name || client.trade}, a ${client.trade} based in ${client.location}.\n\nWould you be open to a quick conversation?\n\n${buildSignOff(client)}`,
-      follow_up_body: `Just following up on my previous message - let me know if it is worth a conversation.`,
+      email_body: `Hi, we are ${sanitize(client.business_name || client.trade)},\n\nWe are a ${sanitize(client.trade)} based in ${sanitize(client.location)}. Would it be worth a quick conversation?\n\n${buildSignOff(client)}`,
+      follow_up_body: `Just following up on my previous message — happy to chat if the timing works.`,
     };
   }
 };
@@ -215,63 +196,121 @@ Return ONLY valid JSON, double quotes only:
 // HELPERS
 // ============================================
 
-const buildPersonalisationInstruction = (lead, enrichmentSection) => {
-  if (!enrichmentSection) {
-    return `# PERSONALISATION
-No website data available. Write para 2 based on what you know about the ${sanitize(lead.business_type)} industry and why they would need joinery services. Keep it realistic and specific to their business type.`;
+const buildIdentity = (client) => {
+  const name = sanitize(client.business_name || client.trade);
+  const trade = sanitize(client.trade);
+  const location = sanitize(client.location);
+  const isLocal = client.location_radius && client.location_radius < 100;
+
+  const offering = client.offering && client.offering.length > 10
+    ? sanitize(client.offering)
+    : `${trade} work`;
+
+  const recentWork = client.recent_job && client.recent_job.length > 10
+    ? `A recent example of your work: ${sanitize(client.recent_job)}.`
+    : '';
+
+  const workTypes = client.work_types?.length > 0
+    ? `You typically work on: ${client.work_types.map(sanitize).join(', ')}.`
+    : '';
+
+  const geography = isLocal
+    ? `You are based in ${location} and work within a ${client.location_radius} mile radius.`
+    : `You are based in ${location} and work nationally.`;
+
+  const toneDescription = getToneDescription(client.tone);
+
+  return `You are ${name} — a ${trade}. ${offering}. ${geography}
+${workTypes}
+${recentWork}
+
+You are writing a short professional email to introduce yourself to a potential client.
+
+Your writing style:
+- Confident in your work, no need to oversell it
+- Clear and direct — short sentences, plain words
+- Professional but human — not corporate, not overly casual
+- You respect the recipient's time so you keep it brief
+- You sound like a capable business owner making a straightforward introduction
+
+ONE RULE FOR LANGUAGE: Describe work as facts, never as qualities.
+Say WHAT you do, not HOW GOOD you are at it.
+If an adjective is describing your own work — remove it and just state the fact instead.
+"We make and fit wooden doors and windows" is better than "we deliver precision-crafted joinery solutions".
+
+GREETING RULE: Always open with "Hi," — never use a contact name, it might be wrong.
+
+${toneDescription}`;
+};
+
+const buildRecipientContext = (lead) => {
+  const lines = [`What you know about ${sanitize(lead.business_name)}:`];
+  lines.push(`- Business type: ${sanitize(lead.business_type)}`);
+  lines.push(`- Location: ${sanitize(lead.city || 'unknown')}`);
+
+  if (lead.enrichment_data) {
+    const e = lead.enrichment_data;
+
+    if (e.one_liner) {
+      lines.push(`- What they do: ${sanitize(e.one_liner)}`);
+    }
+    if (e.services?.length > 0) {
+      lines.push(`- Their services: ${e.services.slice(0, 4).map(sanitize).join(', ')}`);
+    }
+    if (e.specialisms?.length > 0) {
+      lines.push(`- They specialise in: ${e.specialisms.map(sanitize).join(', ')}`);
+    }
+    if (e.team_size_signal && e.team_size_signal !== 'unknown') {
+      lines.push(`- Team size: ${e.team_size_signal}`);
+    }
+    if (e.decision_maker?.name) {
+      lines.push(`- Key person: ${sanitize(e.decision_maker.name)}${e.decision_maker.title ? `, ${sanitize(e.decision_maker.title)}` : ''}`);
+    }
+    if (e.recent_projects?.length > 0) {
+      lines.push(`- Recent projects: ${e.recent_projects.slice(0, 2).map(sanitize).join('; ')}`);
+    }
+
+    if (e.personalization_hooks?.length > 0) {
+      lines.push(`\nSpecific things you noticed about them — pick ONE to reference naturally in your email:`);
+      e.personalization_hooks.slice(0, 3).forEach((h) => {
+        if (h.hook) {
+          lines.push(`- ${sanitize(h.hook)}${h.source_quote ? ` (their words: "${sanitize(h.source_quote)}")` : ''}`);
+        }
+      });
+      lines.push(`Important: reference the angle, not the quote. Make it feel like something you noticed, not something you read.`);
+    }
+  } else {
+    lines.push(`- No website data available`);
+    lines.push(`- Write based on what a ${sanitize(lead.business_type)} business typically needs`);
   }
 
-  return `# PERSONALISATION — CRITICAL
-You have real data from their website. You MUST use this in para 2.
-Do NOT write a generic sentence about their industry.
-Pick the single best personalisation hook and reference it naturally.
-
-${enrichmentSection}
-
-INSTRUCTION: Para 2 must reference something specific from the above — their actual services, a real project, their specialism, or a hook. If hooks have source_quotes, use that angle without copying the quote directly.`;
+  return lines.join('\n');
 };
 
 const buildSignOff = (client) => {
-  const lines = [client.business_name || client.trade];
-
-  if (client.phone) lines.push(client.phone);
-  if (client.reply_email) lines.push(client.reply_email);
-  if (client.website) lines.push(client.website);
-
-  // Format address on one line if available
-  const addressParts = [
-    client.business_address,
-  ].filter(Boolean);
-  if (addressParts.length > 0) lines.push(addressParts.join(', '));
-
-  return lines.join('\n');
+  const lines = [sanitize(client.business_name || client.trade)];
+  if (client.phone) lines.push(sanitize(client.phone));
+  if (client.reply_email) lines.push(sanitize(client.reply_email));
+  if (client.website) lines.push(sanitize(client.website));
+  if (client.business_address) lines.push(sanitize(client.business_address));
+  return lines.filter(Boolean).join('\n');
 };
 
-const buildClientContext = (client) => {
-  const lines = [];
-  lines.push(`- Business: ${sanitize(client.business_name) || sanitize(client.trade)}`);
-  lines.push(`- Trade: ${sanitize(client.trade)}`);
-  lines.push(`- Location: ${sanitize(client.location)}`);
+const getToneDescription = (tone) => {
+  if (!tone) return '';
 
-  if (client.offering && client.offering.length > 10) {
-    lines.push(`- What they do well: ${sanitize(client.offering)}`);
-  } else {
-    lines.push(`- What they do well: Reliable ${sanitize(client.trade)} work in ${sanitize(client.location)}`);
-  }
+  const toneMap = {
+    'Direct and to the point': 'You are direct. You get to the point quickly. No unnecessary words.',
+    'Friendly and approachable': 'You are warm and easy to talk to. Professional but not stiff.',
+    'Professional and formal': 'You are measured and professional. You choose words carefully.',
+    'Peer-to-peer': 'You write as one professional to another. No hierarchy, just a straight conversation.',
+    'Confident and assertive': 'You are confident in what you offer. You state things clearly without hedging.',
+    'Understated and dry': 'You are understated. You say what you mean without dressing it up.',
+  };
 
-  if (client.recent_job && client.recent_job.length > 10) {
-    lines.push(`- Recent proof point (rewrite naturally, do not quote verbatim): ${sanitize(client.recent_job)}`);
-  }
-
-  if (client.work_types?.length > 0) {
-    lines.push(`- Work types: ${client.work_types.map(sanitize).join(', ')}`);
-  }
-
-  if (client.perfect_lead_def) {
-    lines.push(`- Ideal client: ${sanitize(client.perfect_lead_def)}`);
-  }
-
-  return lines.join('\n');
+  const tones = tone.split(',').map(t => t.trim());
+  const descriptions = tones.map(t => toneMap[t] || '').filter(Boolean);
+  return descriptions.length > 0 ? descriptions.join(' ') : '';
 };
 
 const buildEnrichmentContext = (enrichmentData) => {
@@ -282,60 +321,6 @@ const buildEnrichmentContext = (enrichmentData) => {
   if (enrichmentData.team_size_signal) lines.push(`- Team size: ${enrichmentData.team_size_signal}`);
   if (enrichmentData.personalization_hooks?.length > 0) lines.push(`- Hooks available: ${enrichmentData.personalization_hooks.length}`);
   return lines.join('\n');
-};
-
-const buildEmailEnrichmentSection = (enrichmentData) => {
-  if (!enrichmentData) return null;
-  const lines = [];
-
-  if (enrichmentData.one_liner) {
-    lines.push(`WHAT THEY DO: ${sanitize(enrichmentData.one_liner)}`);
-  }
-  if (enrichmentData.services?.length > 0) {
-    lines.push(`THEIR SERVICES: ${enrichmentData.services.slice(0, 4).map(sanitize).join(', ')}`);
-  }
-  if (enrichmentData.specialisms?.length > 0) {
-    lines.push(`SPECIALISMS: ${enrichmentData.specialisms.map(sanitize).join(', ')}`);
-  }
-  if (enrichmentData.team_size_signal && enrichmentData.team_size_signal !== 'unknown') {
-    lines.push(`TEAM SIZE: ${enrichmentData.team_size_signal}`);
-  }
-  if (enrichmentData.decision_maker?.name) {
-    lines.push(`DECISION MAKER: ${sanitize(enrichmentData.decision_maker.name)}, ${sanitize(enrichmentData.decision_maker.title || '')}`);
-  }
-  if (enrichmentData.recent_projects?.length > 0) {
-    lines.push(`RECENT PROJECTS: ${enrichmentData.recent_projects.slice(0, 3).map(sanitize).join('; ')}`);
-  }
-  if (enrichmentData.awards_certifications?.length > 0) {
-    lines.push(`AWARDS/CERTS: ${enrichmentData.awards_certifications.slice(0, 2).map(sanitize).join(', ')}`);
-  }
-
-  // Most important — personalization hooks
-  if (enrichmentData.personalization_hooks?.length > 0) {
-    lines.push(`\nPERSONALISATION HOOKS (use the BEST one — the most specific and interesting):`);
-    enrichmentData.personalization_hooks.slice(0, 3).forEach((h, i) => {
-      if (h.hook && h.source_quote) {
-        lines.push(`Hook ${i + 1}: ${sanitize(h.hook)}`);
-        lines.push(`  Evidence from their site: "${sanitize(h.source_quote)}"`);
-      }
-    });
-  }
-
-  return lines.length > 0 ? lines.join('\n') : null;
-};
-
-const getToneGuide = (tone) => {
-  if (!tone) return 'Direct and professional. Short sentences. No fluff.';
-  const toneMap = {
-    'Direct and to the point': 'Very direct. Short sentences. No softening. Get to the point fast.',
-    'Friendly and approachable': 'Warm but professional. Conversational. Like a friendly colleague.',
-    'Professional and formal': 'Professional tone. No contractions. Clear and respectful.',
-    'Peer-to-peer': 'Like texting a colleague. Casual. Short punchy sentences.',
-    'Confident and assertive': 'Confident, not arrogant. States value clearly. No hedging.',
-    'Understated and dry': 'Minimal. Dry. British understatement. Say less, imply more.',
-  };
-  const tones = tone.split(',').map(t => t.trim());
-  return tones.map(t => toneMap[t] || t).filter(Boolean).join(' + ');
 };
 
 const buildFeedbackExamples = (approved, archived) => {
