@@ -1,9 +1,9 @@
 name: TradeFlow Campaign Runner
 
 on:
-  # Run automatically every day at 9am UTC for ALL clients
-  schedule:
-    - cron: '0 9 * * *'
+  # schedule:
+  #   - cron: '0 9 * * *'
+  workflow_dispatch:
 
   # Allow manual trigger — optionally scoped to one client
   workflow_dispatch:
