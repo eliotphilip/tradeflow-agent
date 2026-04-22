@@ -1,241 +1,441 @@
 {
-  "version": "2.0.0",
-  "description": "Defines every container type TradeFlow can target. Used by the source router to dispatch API calls, by the email writer to personalise outreach, and by the archetype matcher to resolve buyer_archetype_ids.",
-  "container_types": [
+  "version": "1.0",
+  "description": "Organisational buyer types. Each defines the data source, scoring signals and buyer archetype.",
+  "containers": [
     {
       "id": "care_home",
-      "label": "Care home",
-      "plural": "Care homes",
-      "description": "Residential facilities providing personal or nursing care to elderly or disabled adults. Regulated by the Care Quality Commission.",
-      "sources": ["cqc", "companies_house"],
-      "primary_source": "cqc",
-      "buyer_archetype_ids": ["care_home_manager", "facilities_coordinator"],
-      "cqc_service_types": ["Residential social care"],
-      "cqc_specialisms": ["Dementia", "Older people"],
-      "google_maps_types": [],
-      "google_maps_keywords": [],
-      "typical_size": "medium",
-      "staff_count_range": "25–120",
-      "contract_value_range": "£8k–£60k/yr",
-      "pain_points": [
-        "CQC compliance pressure means maintenance cannot be deferred",
-        "High staff turnover leaves no in-house trades expertise",
-        "24/7 operation requires reliable out-of-hours response",
-        "Safeguarding obligations demand DBS-checked contractors"
-      ],
-      "common_trades": ["plumbing", "electrical", "decorating", "flooring", "roofing", "fire_safety"],
-      "decision_driver": "compliance_and_reliability"
+      "display_name": "Care home / nursing home",
+      "category": "residential_care",
+      "buyer_archetype": "care_sector_coordinator",
+      "primary_data_source": "cqc",
+      "secondary_data_sources": ["companies_house"],
+      "companies_house_sic": ["87100", "87300"],
+      "cqc_filters": {
+        "service_types": ["Residential care", "Nursing care"],
+        "allowed_ratings": ["Outstanding", "Good"],
+        "min_capacity": 20
+      },
+      "scoring_signals": {
+        "strong_positive": [
+          "Rated Outstanding or Good by CQC",
+          "Resident capacity 30 or more beds",
+          "In-house activities programme mentioned",
+          "Dedicated activities coordinator listed",
+          "Dementia specialist or elderly care focus"
+        ],
+        "moderate_positive": [
+          "Part of a small group 2 to 10 homes",
+          "Private or self-funded residents",
+          "Recently refurbished or newly opened"
+        ],
+        "negative": [
+          "Rated Requires Improvement or Inadequate",
+          "Capacity under 15 beds",
+          "Local authority only funded"
+        ],
+        "disqualifying": [
+          "Closed or deregistered",
+          "Childrens home"
+        ]
+      }
+    },
+    {
+      "id": "hospice",
+      "display_name": "Hospice",
+      "category": "residential_care",
+      "buyer_archetype": "care_sector_coordinator",
+      "primary_data_source": "cqc",
+      "cqc_filters": {
+        "service_types": ["Hospice services"]
+      },
+      "scoring_signals": {
+        "strong_positive": [
+          "Adult hospice with complementary therapies programme",
+          "Charity funded with wellbeing budget",
+          "Has a day therapy service"
+        ],
+        "disqualifying": ["Childrens hospice"]
+      }
+    },
+    {
+      "id": "retirement_village",
+      "display_name": "Retirement village / sheltered housing",
+      "category": "residential_care",
+      "buyer_archetype": "care_sector_coordinator",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["87300", "68320"],
+      "google_maps_queries": ["retirement village", "sheltered housing", "retirement living"],
+      "scoring_signals": {
+        "strong_positive": [
+          "50 or more units on site",
+          "On-site wellbeing or activity facilities",
+          "Operator manages multiple sites",
+          "Private pay leasehold"
+        ],
+        "negative": ["Pure social housing"]
+      }
+    },
+    {
+      "id": "sheltered_housing",
+      "display_name": "Sheltered housing scheme",
+      "category": "residential_care",
+      "buyer_archetype": "community_residential_manager",
+      "primary_data_source": "companies_house",
+      "companies_house_sic": ["87300", "68320"]
     },
     {
       "id": "hotel",
-      "label": "Hotel",
-      "plural": "Hotels",
-      "description": "Commercial accommodation businesses ranging from boutique independents to chain-managed properties.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "google_maps",
-      "buyer_archetype_ids": ["hospitality_manager", "general_manager"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["lodging", "hotel"],
-      "google_maps_keywords": ["hotel", "inn", "lodge", "boutique hotel", "guest house"],
-      "typical_size": "medium",
-      "staff_count_range": "10–200",
-      "contract_value_range": "£5k–£80k/yr",
-      "pain_points": [
-        "Guest-facing areas demand fast turnaround on any fault",
-        "Revenue-per-room pressure means planned maintenance is preferred over reactive callouts",
-        "Seasonal peaks (summer, Christmas) require pre-season works to complete on schedule",
-        "Branding standards require consistent finish quality across all rooms"
-      ],
-      "common_trades": ["plumbing", "electrical", "decorating", "carpentry", "hvac", "fire_safety"],
-      "decision_driver": "speed_and_quality"
+      "display_name": "Hotel",
+      "category": "hospitality",
+      "buyer_archetype": "hospitality_manager",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["hotel", "boutique hotel", "country house hotel", "spa hotel"],
+      "companies_house_sic": ["55100"],
+      "scoring_signals": {
+        "strong_positive": [
+          "4 or 5 star rating",
+          "Has a spa or wellness facility",
+          "Hosts weddings",
+          "Boutique or country house style",
+          "Part of small luxury group"
+        ],
+        "negative": [
+          "Budget chain with centralised procurement",
+          "Pub with rooms only"
+        ]
+      }
+    },
+    {
+      "id": "wedding_venue",
+      "display_name": "Wedding venue",
+      "category": "hospitality",
+      "buyer_archetype": "hospitality_manager",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["wedding venue", "wedding reception venue", "barn wedding venue", "exclusive use venue"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Hosts many weddings per year",
+          "Offers bridal prep suite or getting ready rooms",
+          "Exclusive use venue",
+          "Has preferred supplier list"
+        ]
+      }
     },
     {
       "id": "school",
-      "label": "School",
-      "plural": "Schools",
-      "description": "State and independent schools including primary, secondary, and academies. Governed by local authority, multi-academy trust, or independent board.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "google_maps",
-      "buyer_archetype_ids": ["school_business_manager", "facilities_coordinator"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["primary_school", "secondary_school", "school"],
-      "google_maps_keywords": ["primary school", "secondary school", "academy", "grammar school", "independent school", "prep school"],
-      "typical_size": "medium",
-      "staff_count_range": "30–150",
-      "contract_value_range": "£4k–£40k/yr",
-      "pain_points": [
-        "Works must be scheduled during holidays to avoid disrupting pupils",
-        "DfE and Ofsted compliance requires documented maintenance records",
-        "Budget approval cycles mean trades must quote early in the school year",
-        "Safeguarding policy requires DBS-checked, site-induction-aware contractors"
-      ],
-      "common_trades": ["roofing", "plumbing", "electrical", "decorating", "flooring", "groundworks"],
-      "decision_driver": "compliance_and_scheduling"
+      "display_name": "School",
+      "category": "education",
+      "buyer_archetype": "education_administrator",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["independent school", "private school", "academy school"],
+      "companies_house_sic": ["85200", "85310", "85320"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Independent or fee paying",
+          "Has wraparound or extended hours care",
+          "Pupil count 300 or more"
+        ],
+        "negative": [
+          "Pupil count under 80"
+        ]
+      }
     },
     {
-      "id": "dental_practice",
-      "label": "Dental practice",
-      "plural": "Dental practices",
-      "description": "NHS and private dental surgeries. Regulated by the Care Quality Commission. Strict infection-control and clinical environment standards.",
-      "sources": ["cqc", "companies_house"],
-      "primary_source": "cqc",
-      "buyer_archetype_ids": ["practice_manager", "facilities_coordinator"],
-      "cqc_service_types": ["Primary Medical Services and Integrated Care"],
-      "cqc_specialisms": ["Dentistry"],
-      "google_maps_types": [],
-      "google_maps_keywords": [],
-      "typical_size": "small",
-      "staff_count_range": "3–30",
-      "contract_value_range": "£2k–£20k/yr",
-      "pain_points": [
-        "Clinical environment rules limit which trades can work in surgery areas",
-        "Downtime costs are very high — a closed surgery loses NHS UDA targets",
-        "Water, drainage, and compressed-air systems are business-critical",
-        "CQC inspections require documentary evidence of planned maintenance"
-      ],
-      "common_trades": ["plumbing", "electrical", "decorating", "air_conditioning"],
-      "decision_driver": "minimal_downtime"
-    },
-    {
-      "id": "care_at_home",
-      "label": "Domiciliary care agency",
-      "plural": "Domiciliary care agencies",
-      "description": "Regulated providers of personal care delivered to people in their own homes. CQC-registered office premises, typically small.",
-      "sources": ["cqc", "companies_house"],
-      "primary_source": "cqc",
-      "buyer_archetype_ids": ["care_home_manager", "practice_manager"],
-      "cqc_service_types": ["Personal care"],
-      "cqc_specialisms": [],
-      "google_maps_types": [],
-      "google_maps_keywords": [],
-      "typical_size": "small",
-      "staff_count_range": "5–40",
-      "contract_value_range": "£1k–£10k/yr",
-      "pain_points": [
-        "Office space is modest but must meet CQC accessibility requirements",
-        "Tight margins mean competitive pricing is essential",
-        "No in-house estates team — heavily reliant on trusted external trades"
-      ],
-      "common_trades": ["plumbing", "electrical", "decorating"],
-      "decision_driver": "price_and_trust"
-    },
-    {
-      "id": "pub_bar",
-      "label": "Pub / bar",
-      "plural": "Pubs and bars",
-      "description": "Licensed on-trade venues including managed pubs, free houses, and cocktail bars.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "google_maps",
-      "buyer_archetype_ids": ["general_manager", "hospitality_manager"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["bar", "pub"],
-      "google_maps_keywords": ["pub", "bar", "free house", "tavern", "inn"],
-      "typical_size": "small",
-      "staff_count_range": "3–40",
-      "contract_value_range": "£2k–£25k/yr",
-      "pain_points": [
-        "Beer cellar systems, gas lines, and extraction are business-critical",
-        "Licensing compliance and EHO visits create hard maintenance deadlines",
-        "Works outside trading hours required — early mornings or Mondays"
-      ],
-      "common_trades": ["plumbing", "electrical", "gas_safe", "decorating", "hvac"],
-      "decision_driver": "speed_and_compliance"
-    },
-    {
-      "id": "restaurant",
-      "label": "Restaurant",
-      "plural": "Restaurants",
-      "description": "Food-service businesses operating a kitchen and dining area. Independent and small-chain operators.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "google_maps",
-      "buyer_archetype_ids": ["general_manager", "hospitality_manager"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["restaurant", "cafe", "food"],
-      "google_maps_keywords": ["restaurant", "bistro", "brasserie", "cafe", "eatery"],
-      "typical_size": "small",
-      "staff_count_range": "5–50",
-      "contract_value_range": "£2k–£30k/yr",
-      "pain_points": [
-        "Commercial kitchens have gas, extraction, and water systems all in constant use",
-        "EHO inspections create mandatory compliance deadlines",
-        "A closed restaurant during a fault means immediate lost revenue"
-      ],
-      "common_trades": ["plumbing", "electrical", "gas_safe", "hvac", "commercial_kitchen"],
-      "decision_driver": "minimal_downtime"
-    },
-    {
-      "id": "gym",
-      "label": "Gym / leisure centre",
-      "plural": "Gyms and leisure centres",
-      "description": "Commercial fitness facilities including independent gyms, national chain branches, and council-run leisure centres.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "google_maps",
-      "buyer_archetype_ids": ["facilities_coordinator", "general_manager"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["gym", "health"],
-      "google_maps_keywords": ["gym", "fitness centre", "leisure centre", "health club", "boxing gym"],
-      "typical_size": "medium",
-      "staff_count_range": "5–80",
-      "contract_value_range": "£3k–£35k/yr",
-      "pain_points": [
-        "Pool and shower facilities require specialist plumbing and legionella control",
-        "Members expect facilities to be operational — closed changing rooms lose memberships",
-        "High moisture environments mean decoration and flooring need frequent attention"
-      ],
-      "common_trades": ["plumbing", "electrical", "flooring", "hvac", "decorating"],
-      "decision_driver": "reliability_and_hygiene"
-    },
-    {
-      "id": "office_building",
-      "label": "Office building",
-      "plural": "Office buildings",
-      "description": "Multi-tenant or owner-occupied commercial office premises. Managed by a facilities or property manager.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "companies_house",
-      "buyer_archetype_ids": ["facilities_coordinator", "property_manager"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["real_estate_agency", "establishment"],
-      "google_maps_keywords": ["business park", "office park", "serviced offices", "commercial property"],
-      "typical_size": "large",
-      "staff_count_range": "5–500",
-      "contract_value_range": "£5k–£100k/yr",
-      "pain_points": [
-        "Multi-tenancy means works must not disrupt neighbouring businesses",
-        "M&E compliance (EICR, gas safety, fire systems) has hard annual deadlines",
-        "Facilities managers are managing multiple sites and need reliable supply chains"
-      ],
-      "common_trades": ["electrical", "plumbing", "hvac", "decorating", "roofing", "fire_safety"],
-      "decision_driver": "compliance_and_reliability"
+      "id": "boarding_school",
+      "display_name": "Boarding school",
+      "category": "education",
+      "buyer_archetype": "education_administrator",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["boarding school", "independent boarding school"],
+      "scoring_signals": {
+        "strong_positive": [
+          "100 or more boarders",
+          "Independent fee paying",
+          "International intake"
+        ]
+      }
     },
     {
       "id": "nursery",
-      "label": "Nursery / early years setting",
-      "plural": "Nurseries",
-      "description": "Ofsted-registered childcare and early education settings including day nurseries and pre-schools.",
-      "sources": ["google_maps", "companies_house"],
-      "primary_source": "google_maps",
-      "buyer_archetype_ids": ["practice_manager", "school_business_manager"],
-      "cqc_service_types": [],
-      "cqc_specialisms": [],
-      "google_maps_types": ["school"],
-      "google_maps_keywords": ["nursery", "day nursery", "pre-school", "preschool", "childcare", "early years"],
-      "typical_size": "small",
-      "staff_count_range": "5–30",
-      "contract_value_range": "£1.5k–£15k/yr",
-      "pain_points": [
-        "Ofsted and EYFS framework require safe, well-maintained premises",
-        "Works must happen when children are not present",
-        "DBS-checked contractors are a non-negotiable requirement",
-        "Outdoor play areas and perimeter security are recurring maintenance needs"
-      ],
-      "common_trades": ["decorating", "plumbing", "electrical", "fencing", "flooring"],
-      "decision_driver": "compliance_and_safety"
+      "display_name": "Nursery / early years",
+      "category": "education",
+      "buyer_archetype": "education_administrator",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["nursery", "day nursery", "childcare nursery"]
+    },
+    {
+      "id": "corporate_office",
+      "display_name": "Corporate office",
+      "category": "corporate",
+      "buyer_archetype": "corporate_wellness_buyer",
+      "primary_data_source": "companies_house",
+      "companies_house_sic": [],
+      "companies_house_filters": {
+        "min_employees": 50,
+        "active_only": true
+      },
+      "scoring_signals": {
+        "strong_positive": [
+          "50 to 500 employees",
+          "Tech creative or professional services sector",
+          "Recent funding round",
+          "Hiring for people culture or HR roles"
+        ],
+        "negative": [
+          "Manufacturing or industrial",
+          "Fully remote no HQ"
+        ]
+      }
+    },
+    {
+      "id": "property_developer",
+      "display_name": "Property developer",
+      "category": "construction",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["41100", "41201", "41202"],
+      "google_maps_queries": ["property developer", "residential developer", "housing developer"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Active building projects",
+          "Residential focus",
+          "Small to medium developer 5 to 50 homes",
+          "Has planning permission recently granted"
+        ],
+        "negative": [
+          "Large national housebuilder centralised procurement",
+          "Commercial only developer"
+        ]
+      }
+    },
+    {
+      "id": "main_contractor",
+      "display_name": "Main contractor / builder",
+      "category": "construction",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["43210", "43220", "43290", "43310", "43320", "43390", "43991", "43999"],
+      "google_maps_queries": ["building contractor", "main contractor", "construction company", "general builder"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Active on Google Maps with reviews",
+          "Residential and commercial projects",
+          "Small to medium firm 5 to 50 employees"
+        ]
+      }
+    },
+    {
+      "id": "housing_association",
+      "display_name": "Housing association",
+      "category": "residential_care",
+      "buyer_archetype": "community_residential_manager",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["68201", "68209"],
+      "google_maps_queries": ["housing association", "social housing"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Manages large portfolio of properties",
+          "Has maintenance or repairs department",
+          "Registered provider"
+        ]
+      }
+    },
+    {
+      "id": "facilities_management",
+      "display_name": "Facilities management company",
+      "category": "corporate",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["81100", "81210", "81220", "81290"],
+      "google_maps_queries": ["facilities management", "facilities services", "FM company"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Manages multiple client sites",
+          "Has maintenance contracts",
+          "Reactive and planned maintenance"
+        ]
+      }
+    },
+    {
+      "id": "architect",
+      "display_name": "Architect",
+      "category": "construction",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["architect", "architecture firm", "architectural services"],
+      "companies_house_sic": ["71111", "71112"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Residential focus",
+          "Works with developers and contractors",
+          "Small to medium practice"
+        ]
+      }
+    },
+    {
+      "id": "letting_agency",
+      "display_name": "Letting agency",
+      "category": "residential",
+      "buyer_archetype": "community_residential_manager",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["letting agency", "estate agent lettings", "property management"],
+      "companies_house_sic": ["68310"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Manages large portfolio",
+          "Has maintenance team or contracts",
+          "Multi-branch operation"
+        ]
+      }
+    },
+    {
+      "id": "fleet_operator",
+      "display_name": "Fleet operator",
+      "category": "automotive",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "companies_house_sic": ["49410", "53200", "81210", "77120"],
+      "scoring_signals": {
+        "strong_positive": [
+          "Van or truck fleet implied by SIC",
+          "Single depot centralised buying",
+          "20 to 200 vehicles"
+        ]
+      }
+    },
+    {
+      "id": "logistics_depot",
+      "display_name": "Logistics depot / warehouse",
+      "category": "automotive",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "companies_house_sic": ["52100", "52290", "49410"]
+    },
+    {
+      "id": "taxi_firm",
+      "display_name": "Taxi / private hire firm",
+      "category": "automotive",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["taxi firm", "private hire"],
+      "companies_house_sic": ["49320"]
+    },
+    {
+      "id": "dealership",
+      "display_name": "Car dealership",
+      "category": "automotive",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["car dealership", "used car dealer"],
+      "companies_house_sic": ["45110", "45190"]
+    },
+    {
+      "id": "sports_club",
+      "display_name": "Sports club / gym",
+      "category": "fitness",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "secondary_data_sources": ["companies_house"],
+      "google_maps_queries": ["sports club", "gym", "private members club", "rugby club", "cricket club"],
+      "companies_house_sic": ["93110", "93120"]
+    },
+    {
+      "id": "residential_block",
+      "display_name": "Residential apartment block / property management",
+      "category": "residential",
+      "buyer_archetype": "community_residential_manager",
+      "primary_data_source": "companies_house",
+      "companies_house_sic": ["68320", "68209"]
+    },
+    {
+      "id": "kennel",
+      "display_name": "Boarding kennel",
+      "category": "animal",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["boarding kennels", "dog boarding", "kennels"]
+    },
+    {
+      "id": "dog_daycare",
+      "display_name": "Dog daycare",
+      "category": "animal",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["dog daycare", "doggy daycare"]
+    },
+    {
+      "id": "rescue_charity",
+      "display_name": "Animal rescue charity",
+      "category": "animal",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["animal rescue", "dog rescue", "animal charity"]
+    },
+    {
+      "id": "stable",
+      "display_name": "Stable / livery yard",
+      "category": "equine",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "google_maps",
+      "google_maps_queries": ["livery yard", "stables", "horse stables", "equestrian"]
+    },
+    {
+      "id": "small_business",
+      "display_name": "Small business",
+      "category": "general",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": [],
+      "google_maps_queries": ["small business", "local business", "independent business"]
+    },
+    {
+      "id": "startup",
+      "display_name": "Startup / growing business",
+      "category": "general",
+      "buyer_archetype": "corporate_wellness_buyer",
+      "primary_data_source": "companies_house",
+      "companies_house_filters": {
+        "incorporated_within_years": 3,
+        "active_only": true
+      },
+      "scoring_signals": {
+        "strong_positive": [
+          "Incorporated within last 2 years",
+          "Tech or digital sector",
+          "Growing headcount"
+        ]
+      }
+    },
+    {
+      "id": "retail_chain",
+      "display_name": "Retail chain",
+      "category": "retail",
+      "buyer_archetype": "operations_manager",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["47110", "47190", "47210", "47220", "47410", "47510", "47710", "47720", "47730", "47740", "47750", "47760", "47770", "47781", "47782", "47789", "47791", "47799"]
+    },
+    {
+      "id": "professional_services",
+      "display_name": "Professional services firm",
+      "category": "professional",
+      "buyer_archetype": "corporate_wellness_buyer",
+      "primary_data_source": "companies_house",
+      "secondary_data_sources": ["google_maps"],
+      "companies_house_sic": ["69101", "69102", "69201", "69202", "70100", "70221", "70229"],
+      "google_maps_queries": ["law firm", "solicitors", "accountancy firm", "consultancy"]
     }
   ]
 }
