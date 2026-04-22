@@ -1,93 +1,150 @@
-// src/sources/_shared.js
-// Shared utilities used by all source modules
-// Normalisation, deduplication, distance calculations
+// src/sources/router.js
+// Dispatches lead finding to the right source modules based on container types
+// All intelligence lives in container_types.json — the router is just a dispatcher
 
-/**
- * @typedef {Object} NormalisedLead
- * @property {string} source
- * @property {string} source_id
- * @property {string|null} container_type
- * @property {string|null} buyer_archetype
- * @property {string} business_name
- * @property {string|null} address
- * @property {string|null} city
- * @property {string|null} postcode
- * @property {string|null} website
- * @property {string|null} phone
- * @property {string|null} email
- * @property {string} description
- * @property {Object} source_metadata
- */
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
-/**
- * Normalise a UK postcode for comparison
- */
-export function normalisePostcode(postcode) {
-  if (!postcode) return null;
-  const cleaned = postcode.toUpperCase().replace(/\s+/g, '');
-  if (cleaned.length < 5) return cleaned;
-  return `${cleaned.slice(0, -3)} ${cleaned.slice(-3)}`;
+import { fetchLeads as fetchFromCQC } from './cqc.js';
+import { fetchLeads as fetchFromCompaniesHouse } from './companiesHouse.js';
+import { fetchLeads as fetchFromGoogleMaps } from './googleMaps.js';
+
+import { dedupeKey, mergeLeads } from './_shared.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CONFIG_PATH = path.join(__dirname, '..', 'config', 'container_types.json');
+
+// Registry of source modules — add new sources here
+const SOURCES = {
+  cqc: { fetchLeads: fetchFromCQC },
+  companies_house: { fetchLeads: fetchFromCompaniesHouse },
+  google_maps: { fetchLeads: fetchFromGoogleMaps },
+};
+
+let containerConfigCache = null;
+
+async function loadContainerConfig() {
+  if (containerConfigCache) return containerConfigCache;
+  const raw = await readFile(CONFIG_PATH, 'utf8');
+  const parsed = JSON.parse(raw);
+  containerConfigCache = Object.fromEntries(parsed.containers.map((c) => [c.id, c]));
+  return containerConfigCache;
+}
+
+function planFetchesForContainer(container) {
+  const sources = [
+    container.primary_data_source,
+    ...(container.secondary_data_sources ?? []),
+  ]
+    .filter(Boolean)
+    .filter((s) => SOURCES[s]);
+
+  return sources.map((sourceId) => ({ sourceId, container }));
 }
 
 /**
- * Normalise a business name for deduplication
+ * Main entry point — fetches leads for a client based on their target container types
+ *
+ * @param {Object} args
+ * @param {Object} args.client - Client record from Supabase
+ * @param {number} [args.perContainerLimit=60] - Max leads per container type
+ * @param {number} [args.concurrency=3] - Max parallel fetch jobs
+ * @returns {Promise<{ leads: NormalisedLead[], stats: Object }>}
  */
-export function normaliseBusinessName(name) {
-  if (!name) return '';
-  return name
-    .toLowerCase()
-    .replace(/\b(ltd|limited|plc|llp|cic|cio|uk|the)\b/g, '')
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+export async function fetchLeadsForClient({
+  client,
+  perContainerLimit = 60,
+  concurrency = 3,
+}) {
+  if (!client?.target_container_types?.length) {
+    console.log('⚠️  No target_container_types set — falling back to trade-based search');
+    return { leads: [], stats: { reason: 'no_target_container_types' } };
+  }
 
-/**
- * Build a dedupe key — same business from different sources should produce the same key
- */
-export function dedupeKey(lead) {
-  const name = normaliseBusinessName(lead.business_name);
-  const postcode = normalisePostcode(lead.postcode);
-  const postcodeArea = postcode ? postcode.split(' ')[0] : (lead.city || '').toLowerCase().slice(0, 5);
-  return `${name}::${postcodeArea}`;
-}
+  const containerConfig = await loadContainerConfig();
 
-/**
- * Merge two leads for the same business from different sources
- * Prefer non-null values, keep first source identity
- */
-export function mergeLeads(a, b) {
-  return {
-    ...a,
-    website: a.website ?? b.website,
-    phone: a.phone ?? b.phone,
-    email: a.email ?? b.email,
-    address: a.address ?? b.address,
-    city: a.city ?? b.city,
-    postcode: a.postcode ?? b.postcode,
-    description: [a.description, b.description].filter(Boolean).join(' | '),
-    source_metadata: {
-      ...a.source_metadata,
-      [`merged_from_${b.source}`]: b.source_metadata,
-    },
+  const jobs = [];
+  const missingContainers = [];
+
+  for (const containerId of client.target_container_types) {
+    const container = containerConfig[containerId];
+    if (!container) {
+      missingContainers.push(containerId);
+      continue;
+    }
+    jobs.push(...planFetchesForContainer(container));
+  }
+
+  if (jobs.length === 0) {
+    return { leads: [], stats: { reason: 'no_valid_containers', missingContainers } };
+  }
+
+  console.log(`📋 Planned ${jobs.length} fetch jobs across ${client.target_container_types.length} container types`);
+
+  // Execute with bounded concurrency
+  const results = [];
+  const errors = [];
+  const queue = [...jobs];
+
+  async function worker() {
+    while (queue.length) {
+      const job = queue.shift();
+      const { sourceId, container } = job;
+      const source = SOURCES[sourceId];
+
+      try {
+        console.log(`   → ${sourceId}: ${container.display_name}`);
+        const leads = await source.fetchLeads({
+          container,
+          client,
+          limit: perContainerLimit,
+        });
+
+        // Stamp container and archetype
+        for (const lead of leads) {
+          lead.container_type = container.id;
+          lead.buyer_archetype = container.buyer_archetype;
+        }
+
+        results.push(...leads);
+      } catch (err) {
+        errors.push({
+          source: sourceId,
+          container: container.id,
+          error: err.message,
+        });
+        console.error(`   ❌ ${sourceId}/${container.id}: ${err.message}`);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, jobs.length) }, () => worker())
+  );
+
+  // Dedupe across sources
+  const byKey = new Map();
+  for (const lead of results) {
+    const key = dedupeKey(lead);
+    if (!byKey.has(key)) {
+      byKey.set(key, lead);
+    } else {
+      byKey.set(key, mergeLeads(byKey.get(key), lead));
+    }
+  }
+  const deduped = [...byKey.values()];
+
+  const stats = {
+    total_fetched: results.length,
+    unique_leads: deduped.length,
+    duplicates_merged: results.length - deduped.length,
+    jobs_run: jobs.length,
+    errors,
+    missing_containers: missingContainers,
   };
-}
 
-/**
- * Haversine distance in miles between two lat/lng points
- */
-export function haversineMiles(lat1, lon1, lat2, lon2) {
-  const toRad = (d) => (d * Math.PI) / 180;
-  const R = 3958.8;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
+  console.log(`📊 Router: ${results.length} fetched → ${deduped.length} unique (${results.length - deduped.length} duplicates merged)`);
 
-/**
- * Simple sleep helper
- */
-export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  return { leads: deduped, stats };
+}
