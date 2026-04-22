@@ -199,6 +199,7 @@ const runCampaign = async (rawClient) => {
     // STEP 7: Filter and rank — threshold lowered to 30
     const qualifiedLeads = enrichedLeads
       .filter(l => l.fit_score >= 30)
+      .filter(l => l.website || l.phone || l.email)
       .sort((a, b) => {
         if (b.matches_perfect_lead_def && !a.matches_perfect_lead_def) return 1;
         if (a.matches_perfect_lead_def && !b.matches_perfect_lead_def) return -1;
