@@ -1,18 +1,16 @@
 // src/index.js
 // Main orchestrator - runs the full lead generation pipeline
-// Called by GitHub Actions on a schedule or manually
+// Uses the container/router architecture for smart lead finding
 
 import { createClient } from '@supabase/supabase-js';
 import { EventEmitter } from 'events';
-import { findLeadsFromCompaniesHouse } from './sources/companiesHouse.js';
-import { findLeadsFromGoogleMaps } from './sources/googleMaps.js';
-import { writeEmail, scoreLead } from './emailWriter.js';
+import { fetchLeadsForClient } from './sources/router.js';
+import { scoreLead, writeEmail } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 import { enrichLeadsBatch } from './enrichment/firecrawl.js';
 import { enhanceClientProfile } from './utils/enhanceClient.js';
 import { classifyTrade, isNationwide } from './utils/classifyTrade.js';
 
-// Prevent MaxListenersExceeded warning from concurrent Firecrawl requests
 EventEmitter.defaultMaxListeners = 20;
 
 const supabase = createClient(
@@ -23,7 +21,6 @@ const supabase = createClient(
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const FIRECRAWL_ENABLED = !!process.env.FIRECRAWL_API_KEY;
 
-// Scoring cap based on volume vs precision preference
 const getScoringCap = (volumeVsPrecision) => {
   const caps = { 1: 80, 2: 60, 3: 50, 4: 35, 5: 20 };
   return caps[volumeVsPrecision] || 50;
@@ -36,18 +33,18 @@ const runCampaign = async (rawClient) => {
   console.log(`\n🚀 Starting campaign for ${rawClient.business_name || rawClient.email}`);
   console.log(`   Trade: ${rawClient.trade} | Location: ${rawClient.location}`);
 
-  // ----------------------------------------
   // STEP 0: Enhance client profile
-  // ----------------------------------------
   const client = await enhanceClientProfile(rawClient);
 
-  // ----------------------------------------
-  // STEP 0B: Classify trade and determine search strategy
-  // ----------------------------------------
+  // STEP 0B: Classify trade and determine search mode
   const tradeClassification = await classifyTrade(client.trade);
   const nationwide = isNationwide(client, tradeClassification);
+  console.log(`   Classification: ${tradeClassification} | Mode: ${nationwide ? '🌍 nationwide' : `📍 local (${client.location_radius || 20} miles)`}`);
 
-  console.log(`   Trade type: ${tradeClassification} | Search mode: ${nationwide ? '🌍 nationwide' : `📍 local (${client.location_radius || 20} miles)`}`);
+  // Ensure client has target_container_types
+  if (!client.target_container_types?.length) {
+    console.log('⚠️  No target_container_types set — client needs to complete onboarding');
+  }
 
   const { data: campaign, error: campaignError } = await supabase
     .from('campaigns')
@@ -61,59 +58,38 @@ const runCampaign = async (rawClient) => {
   }
 
   try {
-    // ----------------------------------------
-    // STEP 1: Find leads from all sources
-    // ----------------------------------------
+    // STEP 1: Find leads using the router
     console.log('\n📍 Step 1: Finding leads...');
 
-    const [chLeads, gmLeads] = await Promise.allSettled([
-      findLeadsFromCompaniesHouse(client, nationwide),
-      findLeadsFromGoogleMaps(client, GOOGLE_MAPS_API_KEY, nationwide),
-    ]);
-
-    const allLeads = [
-      ...(chLeads.status === 'fulfilled' ? chLeads.value : []),
-      ...(gmLeads.status === 'fulfilled' ? gmLeads.value : []),
-    ];
-
-    console.log(`\n📊 Total leads found: ${allLeads.length}`);
-    console.log(`   CH: ${chLeads.status === 'fulfilled' ? chLeads.value.length : 0} | Maps: ${gmLeads.status === 'fulfilled' ? gmLeads.value.length : 0}`);
-
-    // ----------------------------------------
-    // STEP 2: Deduplicate
-    // ----------------------------------------
-    const seen = new Set();
-    const uniqueLeads = allLeads.filter(lead => {
-      const key = `${lead.business_name?.toLowerCase()}-${lead.city?.toLowerCase()}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    const { leads: allLeads, stats } = await fetchLeadsForClient({
+      client,
+      perContainerLimit: 40,
+      concurrency: 3,
     });
 
-    console.log(`🔄 After deduplication: ${uniqueLeads.length} leads`);
+    console.log(`\n📊 Total leads found: ${allLeads.length}`);
+    if (stats.errors?.length > 0) {
+      stats.errors.forEach(e => console.log(`   ⚠️  Error: ${e.source}/${e.container}: ${e.error}`));
+    }
 
-    // ----------------------------------------
-    // STEP 3: Filter out existing leads
-    // ----------------------------------------
+    // STEP 2: Filter out existing leads
     console.log('\n🔍 Checking for existing leads...');
 
     const { data: existingLeads } = await supabase
       .from('leads')
-      .select('business_name, city')
+      .select('source, source_id')
       .eq('client_id', client.id);
 
     const existingKeys = new Set(
-      (existingLeads || []).map(l =>
-        `${l.business_name?.toLowerCase()}-${l.city?.toLowerCase()}`
-      )
+      (existingLeads || []).map(l => `${l.source}::${l.source_id}`)
     );
 
-    const newLeads = uniqueLeads.filter(lead => {
-      const key = `${lead.business_name?.toLowerCase()}-${lead.city?.toLowerCase()}`;
+    const newLeads = allLeads.filter(lead => {
+      const key = `${lead.source}::${lead.source_id}`;
       return !existingKeys.has(key);
     });
 
-    console.log(`📊 ${uniqueLeads.length} found — ${existingKeys.size} already in DB — ${newLeads.length} new`);
+    console.log(`📊 ${allLeads.length} found — ${existingKeys.size} already in DB — ${newLeads.length} new`);
 
     if (newLeads.length === 0) {
       console.log('✅ No new leads to process');
@@ -127,38 +103,31 @@ const runCampaign = async (rawClient) => {
       return;
     }
 
-    // ----------------------------------------
-    // STEP 4: Load feedback data
-    // ----------------------------------------
+    // STEP 3: Load feedback data
     console.log('\n📚 Loading feedback data...');
-
     const { data: approvedLeads } = await supabase
       .from('leads')
-      .select('business_name, business_type, city')
+      .select('business_name, container_type, city')
       .eq('client_id', client.id)
       .eq('status', 'approved')
       .limit(10);
 
     const { data: archivedLeads } = await supabase
       .from('leads')
-      .select('business_name, business_type, city')
+      .select('business_name, container_type, city')
       .eq('client_id', client.id)
       .eq('status', 'archived')
       .limit(10);
 
     console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived for calibration`);
 
-    // ----------------------------------------
-    // STEP 5: Cap leads before scoring
-    // ----------------------------------------
+    // STEP 4: Cap leads before scoring
     const scoringCap = getScoringCap(client.volume_vs_precision);
     const leadsToScore = newLeads.slice(0, scoringCap);
-    console.log(`\n📊 Scoring cap: ${scoringCap} leads (volume_vs_precision: ${client.volume_vs_precision || 3})`);
+    console.log(`\n📊 Scoring cap: ${scoringCap} leads`);
 
-    // ----------------------------------------
-    // STEP 6: Initial scoring
-    // ----------------------------------------
-    console.log('🎯 Step 3: Initial scoring...');
+    // STEP 5: Initial scoring
+    console.log('🎯 Scoring leads...');
     const scoredLeads = [];
 
     for (const lead of leadsToScore) {
@@ -166,24 +135,16 @@ const runCampaign = async (rawClient) => {
       scoredLeads.push({ ...lead, ...score });
     }
 
-    const enrichmentCandidates = scoredLeads.filter(
-      l => l.fit_score >= 50 && l.website
-    );
+    const enrichmentCandidates = scoredLeads.filter(l => l.fit_score >= 50 && l.website);
+    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites for enrichment`);
 
-    console.log(`   Initial pass: ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites`);
-
-    // ----------------------------------------
-    // STEP 7: Firecrawl enrichment
-    // ----------------------------------------
+    // STEP 6: Firecrawl enrichment
     let enrichedLeads = scoredLeads;
 
     if (FIRECRAWL_ENABLED && enrichmentCandidates.length > 0) {
-      console.log(`\n🌐 Step 4: Enriching ${enrichmentCandidates.length} leads with Firecrawl...`);
+      console.log(`\n🌐 Enriching ${enrichmentCandidates.length} leads with Firecrawl...`);
 
-      const enrichmentResults = await enrichLeadsBatch(enrichmentCandidates, {
-        concurrency: 3,
-      });
-
+      const enrichmentResults = await enrichLeadsBatch(enrichmentCandidates, { concurrency: 3 });
       let successCount = 0;
       let cacheHits = 0;
 
@@ -195,29 +156,20 @@ const runCampaign = async (rawClient) => {
           if (enrichment.from_cache) cacheHits++;
           else successCount++;
 
-          const emailFromEnrichment = enrichment.enrichment_data?.contact?.email;
-
           return {
             ...lead,
             enrichment_data: enrichment.enrichment_data,
             enrichment_status: enrichment.enrichment_status,
-            email: emailFromEnrichment || lead.email,
+            email: enrichment.enrichment_data?.contact?.email || lead.email,
           };
         }
-
-        return {
-          ...lead,
-          enrichment_status: enrichment.enrichment_status,
-          enrichment_data: null,
-        };
+        return { ...lead, enrichment_status: enrichment.enrichment_status };
       });
 
-      console.log(`   ✅ Enriched: ${successCount} new scrapes, ${cacheHits} from cache`);
+      console.log(`   ✅ ${successCount} new scrapes, ${cacheHits} from cache`);
 
       // Re-score enriched leads
-      console.log('   🔄 Re-scoring enriched leads...');
       const reScored = [];
-
       for (const lead of enrichedLeads) {
         if (lead.enrichment_data) {
           const newScore = await scoreLead(client, lead, approvedLeads || [], archivedLeads || []);
@@ -226,16 +178,10 @@ const runCampaign = async (rawClient) => {
           reScored.push(lead);
         }
       }
-
       enrichedLeads = reScored;
-
-    } else if (!FIRECRAWL_ENABLED) {
-      console.log('\n🌐 Step 4: Skipping enrichment — no Firecrawl API key');
     }
 
-    // ----------------------------------------
-    // STEP 8: Filter and rank final leads
-    // ----------------------------------------
+    // STEP 7: Filter and rank
     const qualifiedLeads = enrichedLeads
       .filter(l => l.fit_score >= 50)
       .sort((a, b) => {
@@ -251,41 +197,28 @@ const runCampaign = async (rawClient) => {
     const enrichedCount = qualifiedLeads.filter(l => l.enrichment_data).length;
     console.log(`\n✅ Qualified: ${qualifiedLeads.length} leads (${perfectMatches} perfect ⭐, ${enrichedCount} enriched 🌐)`);
 
-    // ----------------------------------------
-    // STEP 9: Calculate distances
-    // ----------------------------------------
+    // STEP 8: Calculate distances (local trades only)
     const shouldCalculateDistance = !nationwide && tradeClassification === 'local_only' && client.location_radius;
     let leadsWithDistances = [];
 
     if (shouldCalculateDistance) {
-      console.log(`\n📏 Step 5: Calculating distances (radius: ${client.location_radius} miles)...`);
-
+      console.log(`\n📏 Calculating distances...`);
       for (const lead of qualifiedLeads) {
         let distance = null;
         if (lead.address && client.location) {
-          distance = await calculateDistance(
-            client.location,
-            lead.address,
-            GOOGLE_MAPS_API_KEY
-          );
+          distance = await calculateDistance(client.location, lead.address, GOOGLE_MAPS_API_KEY);
         }
         leadsWithDistances.push({ ...lead, distance_miles: distance });
         await sleep(150);
       }
-
       const withDistance = leadsWithDistances.filter(l => l.distance_miles !== null);
       console.log(`✅ Distance calculated for ${withDistance.length}/${leadsWithDistances.length} leads`);
-
     } else {
-      const reason = nationwide ? 'nationwide search' : 'remote-capable trade';
-      console.log(`\n📏 Step 5: Skipping distances — ${reason}`);
       leadsWithDistances = qualifiedLeads.map(l => ({ ...l, distance_miles: null }));
     }
 
-    // ----------------------------------------
-    // STEP 10: Write emails
-    // ----------------------------------------
-    console.log('\n✍️  Step 6: Writing personalised emails...');
+    // STEP 9: Write emails
+    console.log('\n✍️  Writing personalised emails...');
     const leadsWithEmails = [];
 
     for (const lead of leadsWithDistances) {
@@ -294,11 +227,8 @@ const runCampaign = async (rawClient) => {
       await sleep(300);
     }
 
-    // ----------------------------------------
-    // STEP 11: Save to Supabase
-    // ----------------------------------------
-    console.log('\n💾 Step 7: Saving leads to database...');
-
+    // STEP 10: Save to Supabase
+    console.log('\n💾 Saving leads to database...');
     const batches = chunkArray(leadsWithEmails, 10);
     let savedCount = 0;
 
@@ -312,10 +242,14 @@ const runCampaign = async (rawClient) => {
         website: lead.website || null,
         address: lead.address || null,
         city: lead.city || null,
-        business_type: lead.business_type || null,
+        postcode: lead.postcode || null,
+        business_type: lead.container_type || null,
         description: lead.description || null,
         source: lead.source,
         source_id: lead.source_id || null,
+        container_type: lead.container_type || null,
+        buyer_archetype: lead.buyer_archetype || null,
+        source_metadata: lead.source_metadata || {},
         fit_score: lead.fit_score,
         fit_reason: lead.fit_reason,
         distance_miles: lead.distance_miles || null,
@@ -332,51 +266,38 @@ const runCampaign = async (rawClient) => {
       const { error } = await supabase
         .from('leads')
         .upsert(leadsToInsert, {
-          onConflict: 'client_id,business_name,city',
+          onConflict: 'client_id,source,source_id',
           ignoreDuplicates: true,
         });
 
-      if (error) {
-        console.error('Batch save error:', error.message);
-      } else {
-        savedCount += batch.length;
-      }
+      if (error) console.error('Batch save error:', error.message);
+      else savedCount += batch.length;
     }
 
-    console.log(`✅ Saved ${savedCount} leads to database`);
+    console.log(`✅ Saved ${savedCount} leads`);
 
-    // ----------------------------------------
-    // STEP 12: Update records
-    // ----------------------------------------
-    await supabase
-      .from('campaigns')
-      .update({
-        status: 'complete',
-        leads_found: allLeads.length,
-        leads_qualified: qualifiedLeads.length,
-        emails_drafted: leadsWithEmails.length,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', campaign.id);
+    // STEP 11: Update records
+    await supabase.from('campaigns').update({
+      status: 'complete',
+      leads_found: allLeads.length,
+      leads_qualified: qualifiedLeads.length,
+      emails_drafted: leadsWithEmails.length,
+      completed_at: new Date().toISOString(),
+    }).eq('id', campaign.id);
 
-    await supabase
-      .from('clients')
+    await supabase.from('clients')
       .update({ last_campaign_run: new Date().toISOString() })
       .eq('id', client.id);
 
-    console.log(`\n🎉 Campaign complete!`);
-    console.log(`   Found: ${allLeads.length} | Qualified: ${qualifiedLeads.length} | Perfect: ${perfectMatches} ⭐ | Enriched: ${enrichedCount} 🌐 | Saved: ${savedCount}`);
+    console.log(`\n🎉 Campaign complete! Found: ${allLeads.length} | Qualified: ${qualifiedLeads.length} | Perfect: ${perfectMatches} ⭐ | Enriched: ${enrichedCount} 🌐 | Saved: ${savedCount}`);
 
   } catch (err) {
     console.error('Campaign failed:', err.message);
-    await supabase
-      .from('campaigns')
-      .update({
-        status: 'failed',
-        error_message: err.message,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', campaign.id);
+    await supabase.from('campaigns').update({
+      status: 'failed',
+      error_message: err.message,
+      completed_at: new Date().toISOString(),
+    }).eq('id', campaign.id);
   }
 };
 
@@ -413,7 +334,6 @@ const main = async () => {
     if (error) { console.error('❌ Failed to fetch client:', error.message); process.exit(1); }
     if (!data || data.length === 0) { console.error('❌ Client not found'); process.exit(1); }
     clients = data;
-
   } else {
     console.log(`\n📅 Scheduled run — processing all active clients`);
     const { data, error } = await supabase
@@ -438,20 +358,11 @@ const main = async () => {
   console.log('\n✅ All campaigns complete');
 };
 
-// ============================================
-// HELPERS
-// ============================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 const chunkArray = (arr, size) => {
   const chunks = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
   return chunks;
 };
 
-main().catch(err => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+main().catch(err => { console.error('Fatal error:', err); process.exit(1); });
