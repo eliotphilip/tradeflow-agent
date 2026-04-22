@@ -1,139 +1,159 @@
 {
-  "version": "2.0.0",
-  "description": "Defines every buyer persona TradeFlow targets. Used by the email writer to select the right tone, opening hook, and pain points. Linked from container_types.json via buyer_archetype_ids.",
-  "buyer_archetypes": [
+  "version": "1.0",
+  "description": "Voice modules for cold outreach. Each archetype defines who the buyer is, what they care about, and how to write to them.",
+  "archetypes": [
     {
-      "id": "care_home_manager",
-      "label": "Care home manager",
-      "alt_titles": ["Registered manager", "Home manager", "Nominated individual"],
-      "container_types": ["care_home", "care_at_home"],
-      "seniority": "decision_maker",
-      "owns_budget": true,
-      "procurement_style": "relationship",
-      "tone": "warm_professional",
-      "primary_pain": "CQC compliance — a failed inspection or enforcement notice puts the registration at risk",
-      "secondary_pain": "No in-house maintenance team means every fault depends on finding a reliable contractor quickly",
-      "email_hook": "compliance_risk",
-      "subject_line_style": "direct_benefit",
-      "avoid": ["overly salesy language", "jargon-heavy intros", "price-first messaging"],
-      "example_openers": [
-        "Keeping on top of maintenance is one less thing to worry about before your next CQC visit.",
-        "We work with a number of registered managers in [area] who need contractors they can trust at short notice."
-      ]
+      "id": "care_sector_coordinator",
+      "display_name": "Care sector activities coordinator or home manager",
+      "typical_titles": ["Activities Coordinator", "Wellbeing Lead", "Home Manager", "Registered Manager", "Lifestyle Coordinator"],
+      "what_they_care_about": [
+        "Resident wellbeing and dignity",
+        "Family satisfaction and CQC evidence",
+        "Reliability — cancellations hurt them with residents",
+        "DBS checked, insured, experienced with elderly or dementia clients"
+      ],
+      "what_they_dont_care_about": [
+        "Revenue or growth numbers",
+        "Efficiency or cost-saving language"
+      ],
+      "tone": "warm, human, resident-focused, unhurried",
+      "language_rules": [
+        "Use residents never clients or customers",
+        "Lead with benefit to residents not service features",
+        "Mention DBS insurance and experience with elderly clients if true",
+        "Acknowledge the trust involved in letting someone into their home"
+      ],
+      "end_user_vocabulary": "residents",
+      "cta_style": "low commitment — suggest a visit or quick call, no pressure"
     },
     {
-      "id": "facilities_coordinator",
-      "label": "Facilities coordinator",
-      "alt_titles": ["Facilities manager", "Estates manager", "Building manager", "Site manager"],
-      "container_types": ["care_home", "school", "gym", "office_building", "nursery"],
-      "seniority": "influencer",
-      "owns_budget": false,
-      "procurement_style": "process",
-      "tone": "practical_peer",
-      "primary_pain": "Managing multiple contractors across a site with no single reliable point of contact",
-      "secondary_pain": "Getting sign-off on spend means needing clear quotes and documented compliance",
-      "email_hook": "simplify_workload",
-      "subject_line_style": "problem_solution",
-      "avoid": ["pitching over their head to the CEO", "vague capability statements", "ignoring the compliance angle"],
-      "example_openers": [
-        "If you're managing maintenance across a busy site, we make it straightforward — one point of contact, fully documented.",
-        "We help facilities teams at [container type] keep on top of planned and reactive works without the back-and-forth."
-      ]
+      "id": "education_administrator",
+      "display_name": "Education administrator — bursar, head of boarding, nursery manager",
+      "typical_titles": ["Bursar", "Head of Boarding", "Nursery Manager", "Deputy Head", "Business Manager", "Extended Hours Lead"],
+      "what_they_care_about": [
+        "Safeguarding DBS and policy compliance",
+        "Minimal disruption to the school day",
+        "Fit with the school ethos",
+        "Value for parents or the school budget"
+      ],
+      "what_they_dont_care_about": [
+        "Casual or over-familiar tone",
+        "Hard sell outreach"
+      ],
+      "tone": "polite, formal-ish, safeguarding-aware, confident not pushy",
+      "language_rules": [
+        "Mention Enhanced DBS safeguarding training and insurance up front if applicable",
+        "Reference the school by name",
+        "Keep emails short"
+      ],
+      "end_user_vocabulary": "pupils or students",
+      "cta_style": "offer to send a one-page info sheet or meet briefly after the school day"
     },
     {
       "id": "hospitality_manager",
-      "label": "Hospitality manager",
-      "alt_titles": ["Operations manager", "Property manager", "Maintenance manager", "Rooms manager"],
-      "container_types": ["hotel", "pub_bar", "restaurant"],
-      "seniority": "influencer",
-      "owns_budget": false,
-      "procurement_style": "relationship",
-      "tone": "practical_peer",
-      "primary_pain": "Guest-facing faults that need fixing before the next check-in or service",
-      "secondary_pain": "Works that overrun into trading hours cost more than the job itself",
-      "email_hook": "speed_and_reliability",
-      "subject_line_style": "problem_solution",
-      "avoid": ["lengthy intros", "focusing on price over speed", "generic contractor language"],
-      "example_openers": [
-        "We work around your trading hours — so a fault on Monday morning is sorted before your lunchtime covers.",
-        "Maintenance that fits around your guests, not the other way around."
-      ]
+      "display_name": "Hospitality or events manager",
+      "typical_titles": ["General Manager", "Spa Manager", "Events Coordinator", "Wedding Coordinator", "Food and Beverage Manager", "Operations Manager"],
+      "what_they_care_about": [
+        "Guest experience and reviews",
+        "Being able to say yes to unusual guest requests",
+        "Reliable suppliers who understand discretion",
+        "Seasonal capacity weddings Christmas summer"
+      ],
+      "what_they_dont_care_about": [
+        "Lengthy emails",
+        "Anything that sounds like a franchise pitch"
+      ],
+      "tone": "polished, concise, guest-experience-led",
+      "language_rules": [
+        "Use guests never customers",
+        "Reference a specific offering of theirs if known from enrichment",
+        "Keep it short under 90 words"
+      ],
+      "end_user_vocabulary": "guests",
+      "cta_style": "offer preferred supplier trial or taster session"
     },
     {
-      "id": "general_manager",
-      "label": "General manager",
-      "alt_titles": ["GM", "Managing director", "Owner", "Director", "Proprietor"],
-      "container_types": ["hotel", "pub_bar", "restaurant", "gym"],
-      "seniority": "decision_maker",
-      "owns_budget": true,
-      "procurement_style": "relationship",
-      "tone": "peer_to_peer",
-      "primary_pain": "Unplanned maintenance spend disrupting cash flow and operations",
-      "secondary_pain": "Compliance deadlines (gas safety, EICR, EHO) that can't be missed",
-      "email_hook": "business_continuity",
-      "subject_line_style": "direct_benefit",
-      "avoid": ["corporate tone", "long capability lists", "cold opener with no local hook"],
-      "example_openers": [
-        "Running a [container type] in [area] means maintenance can't wait — we're on call when you need us.",
-        "We keep [container type] owners in [area] compliant and operational without the hassle."
-      ]
+      "id": "corporate_wellness_buyer",
+      "display_name": "Corporate wellness or HR buyer",
+      "typical_titles": ["People and Culture Lead", "Head of People", "HR Manager", "Office Manager", "Employee Experience Manager"],
+      "what_they_care_about": [
+        "Employee engagement and retention",
+        "Easy to run perks that dont create admin",
+        "Fitting within existing wellness budget lines"
+      ],
+      "what_they_dont_care_about": [
+        "Pricing first pitches",
+        "Anything that increases their workload"
+      ],
+      "tone": "professional, peer-to-peer, outcome-focused, modern",
+      "language_rules": [
+        "Lead with the employee experience outcome not your service",
+        "Mention how easy it is to run",
+        "Offer a trial not a contract"
+      ],
+      "end_user_vocabulary": "employees or team",
+      "cta_style": "offer a free taster day for the team"
     },
     {
-      "id": "school_business_manager",
-      "label": "School business manager",
-      "alt_titles": ["SBM", "Business manager", "Bursar", "School administrator"],
-      "container_types": ["school", "nursery"],
-      "seniority": "decision_maker",
-      "owns_budget": true,
-      "procurement_style": "process",
-      "tone": "formal_professional",
-      "primary_pain": "Coordinating works during term breaks on a fixed annual budget",
-      "secondary_pain": "Safeguarding obligations mean every contractor must be DBS-checked and site-inducted",
-      "email_hook": "compliance_and_scheduling",
-      "subject_line_style": "direct_benefit",
-      "avoid": ["informal tone", "last-minute pitch timing", "not mentioning DBS / safeguarding"],
-      "example_openers": [
-        "We work with schools across [area] to schedule maintenance during holidays — fully DBS-checked and Ofsted-aware.",
-        "Planning ahead for summer works? We help school business managers get quotes early and contractors confirmed."
-      ]
+      "id": "operations_manager",
+      "display_name": "Operations, fleet or facilities manager",
+      "typical_titles": ["Fleet Manager", "Operations Manager", "Depot Manager", "Facilities Manager", "Yard Manager", "General Manager", "Site Manager"],
+      "what_they_care_about": [
+        "Uptime efficiency and reducing hassle",
+        "Fixed costs they can plan around",
+        "Reliable suppliers who turn up on time",
+        "Not having to chase invoices or insurance certs"
+      ],
+      "what_they_dont_care_about": [
+        "Emotive language",
+        "Anything vague"
+      ],
+      "tone": "direct, practical, no fluff, specific",
+      "language_rules": [
+        "Lead with a concrete hook — what you do and where",
+        "Mention insurance and accreditation specifically if relevant",
+        "Be upfront about what you offer",
+        "Keep it short — operations people skim"
+      ],
+      "end_user_vocabulary": "projects or sites",
+      "cta_style": "offer a one-site trial or quick call to discuss requirements"
     },
     {
-      "id": "practice_manager",
-      "label": "Practice manager",
-      "alt_titles": ["Clinic manager", "Operations manager", "Office manager"],
-      "container_types": ["dental_practice", "care_at_home", "nursery"],
-      "seniority": "decision_maker",
-      "owns_budget": true,
-      "procurement_style": "relationship",
-      "tone": "warm_professional",
-      "primary_pain": "Any downtime in a clinical or regulated environment costs revenue and risks CQC compliance",
-      "secondary_pain": "Finding contractors who understand clinical environments and can work outside appointment hours",
-      "email_hook": "minimal_downtime",
-      "subject_line_style": "problem_solution",
-      "avoid": ["price-first messaging", "ignoring the clinical environment angle", "generic contractor pitch"],
-      "example_openers": [
-        "We carry out works outside your appointment hours so your patients never notice a thing.",
-        "Maintenance in a clinical environment needs the right contractor — we understand CQC requirements and work to your schedule."
-      ]
+      "id": "community_residential_manager",
+      "display_name": "Block or residential community manager",
+      "typical_titles": ["Block Manager", "Building Manager", "Property Manager", "Estate Manager", "Housing Officer"],
+      "what_they_care_about": [
+        "Resident or tenant satisfaction",
+        "Not having to field more complaints",
+        "Vetted insured reliable contractors",
+        "Services that add value to the building"
+      ],
+      "tone": "professional, resident-focused, practical",
+      "language_rules": [
+        "Frame as a resident amenity not a sale",
+        "Mention vetting insurance and reliability",
+        "Reference similar buildings served if true"
+      ],
+      "end_user_vocabulary": "residents or tenants",
+      "cta_style": "offer to be added to the buildings approved contractor list"
     },
     {
-      "id": "property_manager",
-      "label": "Property manager",
-      "alt_titles": ["Asset manager", "Portfolio manager", "Commercial property manager"],
-      "container_types": ["office_building"],
-      "seniority": "decision_maker",
-      "owns_budget": true,
-      "procurement_style": "process",
-      "tone": "formal_professional",
-      "primary_pain": "Managing compliance across a multi-site portfolio with reliable documented records",
-      "secondary_pain": "Tenant satisfaction depends on issues being resolved fast without disrupting neighbouring occupants",
-      "email_hook": "portfolio_efficiency",
-      "subject_line_style": "direct_benefit",
-      "avoid": ["single-site framing", "vague capability statements", "ignoring compliance documentation"],
-      "example_openers": [
-        "We support commercial property managers across [area] with planned maintenance, reactive cover, and full compliance documentation.",
-        "One contractor across your portfolio — EICR, gas safety, fabric maintenance — all documented and on file."
-      ]
+      "id": "healthcare_admin",
+      "display_name": "Healthcare practice admin",
+      "typical_titles": ["Practice Manager", "Clinic Manager", "Lead Nurse", "Patient Services Manager"],
+      "what_they_care_about": [
+        "Patient outcomes and satisfaction",
+        "Appropriate qualifications and regulatory registration",
+        "Professional not salesy communication"
+      ],
+      "tone": "clinically precise, professional, brief",
+      "language_rules": [
+        "Lead with qualifications and registration if applicable",
+        "Mention any prior NHS or private practice experience",
+        "Keep it brief and professional"
+      ],
+      "end_user_vocabulary": "patients",
+      "cta_style": "offer a short call to discuss how you could support their patients"
     }
   ]
 }
