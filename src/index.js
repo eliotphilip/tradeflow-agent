@@ -69,6 +69,12 @@ const runCampaign = async (rawClient) => {
       stats.errors.forEach(e => console.log(`   ⚠️  Error: ${e.source}/${e.container}: ${e.error}`));
     }
 
+    // Log breakdown by source
+    const gmCount = allLeads.filter(l => l.source === 'google_maps').length;
+    const chCount = allLeads.filter(l => l.source === 'companies_house').length;
+    const cqcCount = allLeads.filter(l => l.source === 'cqc').length;
+    console.log(`   Google Maps: ${gmCount} | Companies House: ${chCount} | CQC: ${cqcCount}`);
+
     // STEP 2: Filter out existing leads
     console.log('\n🔍 Checking for existing leads...');
 
@@ -119,9 +125,17 @@ const runCampaign = async (rawClient) => {
     console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived for calibration`);
 
     // STEP 4: Cap leads before scoring
+    // Prioritise Google Maps leads — they have websites and are higher quality
+    // CQC leads next — verified organisations
+    // Companies House last — broadest but least filtered
     const scoringCap = getScoringCap(client.volume_vs_precision);
-    const leadsToScore = newLeads.slice(0, scoringCap);
-    console.log(`\n📊 Scoring cap: ${scoringCap} leads`);
+    const sortedNewLeads = [
+      ...newLeads.filter(l => l.source === 'google_maps'),
+      ...newLeads.filter(l => l.source === 'cqc'),
+      ...newLeads.filter(l => l.source === 'companies_house'),
+    ];
+    const leadsToScore = sortedNewLeads.slice(0, scoringCap);
+    console.log(`\n📊 Scoring cap: ${scoringCap} leads (${leadsToScore.filter(l => l.source === 'google_maps').length} Maps, ${leadsToScore.filter(l => l.source === 'cqc').length} CQC, ${leadsToScore.filter(l => l.source === 'companies_house').length} CH)`);
 
     // STEP 5: Initial scoring
     console.log('🎯 Scoring leads...');
@@ -131,10 +145,13 @@ const runCampaign = async (rawClient) => {
       const score = await scoreLead(client, lead, approvedLeads || [], archivedLeads || []);
       scoredLeads.push({ ...lead, ...score });
     }
-const sampleScores = scoredLeads.slice(0, 5).map(l => `${l.business_name}: ${l.fit_score}`).join(' | ');
-console.log(`   Sample scores: ${sampleScores}`);
-    const enrichmentCandidates = scoredLeads.filter(l => l.fit_score >= 50 && l.website);
-    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites`);
+
+    // Debug — show sample scores
+    const sampleScores = scoredLeads.slice(0, 5).map(l => `${l.business_name}: ${l.fit_score}`).join(' | ');
+    console.log(`   Sample scores: ${sampleScores}`);
+
+    const enrichmentCandidates = scoredLeads.filter(l => l.fit_score >= 30 && l.website);
+    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 30).length} above threshold, ${enrichmentCandidates.length} have websites`);
 
     // STEP 6: Firecrawl enrichment
     let enrichedLeads = scoredLeads;
@@ -179,9 +196,9 @@ console.log(`   Sample scores: ${sampleScores}`);
       enrichedLeads = reScored;
     }
 
-    // STEP 7: Filter and rank
+    // STEP 7: Filter and rank — threshold lowered to 30
     const qualifiedLeads = enrichedLeads
-      .filter(l => l.fit_score >= 50)
+      .filter(l => l.fit_score >= 30)
       .sort((a, b) => {
         if (b.matches_perfect_lead_def && !a.matches_perfect_lead_def) return 1;
         if (a.matches_perfect_lead_def && !b.matches_perfect_lead_def) return -1;
