@@ -9,7 +9,7 @@ import { scoreLead, writeEmail } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 import { enrichLeadsBatch } from './enrichment/firecrawl.js';
 import { enhanceClientProfile } from './utils/enhanceClient.js';
-
+import { classifyTrade, isNationwide } from './utils/classifyTrade.js';
 
 EventEmitter.defaultMaxListeners = 20;
 
