@@ -9,7 +9,6 @@ import { scoreLead, writeEmail } from './emailWriter.js';
 import { calculateDistance } from './utils/distance.js';
 import { enrichLeadsBatch } from './enrichment/firecrawl.js';
 import { enhanceClientProfile } from './utils/enhanceClient.js';
-import { classifyTrade, isNationwide } from './utils/classifyTrade.js';
 
 EventEmitter.defaultMaxListeners = 20;
 
@@ -36,12 +35,10 @@ const runCampaign = async (rawClient) => {
   // STEP 0: Enhance client profile
   const client = await enhanceClientProfile(rawClient);
 
-  // STEP 0B: Classify trade and determine search mode
-  const tradeClassification = await classifyTrade(client.trade);
-  const nationwide = isNationwide(client, tradeClassification);
-  console.log(`   Classification: ${tradeClassification} | Mode: ${nationwide ? '🌍 nationwide' : `📍 local (${client.location_radius || 20} miles)`}`);
+  // Determine search mode from location_radius
+  const nationwide = !client.location_radius || client.location_radius >= 100;
+  console.log(`   Mode: ${nationwide ? '🌍 nationwide' : `📍 local (${client.location_radius || 20} miles)`}`);
 
-  // Ensure client has target_container_types
   if (!client.target_container_types?.length) {
     console.log('⚠️  No target_container_types set — client needs to complete onboarding');
   }
@@ -136,7 +133,7 @@ const runCampaign = async (rawClient) => {
     }
 
     const enrichmentCandidates = scoredLeads.filter(l => l.fit_score >= 50 && l.website);
-    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites for enrichment`);
+    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites`);
 
     // STEP 6: Firecrawl enrichment
     let enrichedLeads = scoredLeads;
@@ -197,8 +194,8 @@ const runCampaign = async (rawClient) => {
     const enrichedCount = qualifiedLeads.filter(l => l.enrichment_data).length;
     console.log(`\n✅ Qualified: ${qualifiedLeads.length} leads (${perfectMatches} perfect ⭐, ${enrichedCount} enriched 🌐)`);
 
-    // STEP 8: Calculate distances (local trades only)
-    const shouldCalculateDistance = !nationwide && tradeClassification === 'local_only' && client.location_radius;
+    // STEP 8: Calculate distances (local only)
+    const shouldCalculateDistance = !nationwide && client.location_radius;
     let leadsWithDistances = [];
 
     if (shouldCalculateDistance) {
@@ -358,7 +355,11 @@ const main = async () => {
   console.log('\n✅ All campaigns complete');
 };
 
+// ============================================
+// HELPERS
+// ============================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 const chunkArray = (arr, size) => {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
