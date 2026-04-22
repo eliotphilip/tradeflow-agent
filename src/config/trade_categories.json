@@ -1,0 +1,139 @@
+{
+  "version": "2.0.0",
+  "description": "Master list of trade categories TradeFlow can match leads against. Used by the email writer to personalise outreach and by the router to filter relevant container types per client.",
+  "trade_categories": [
+    {
+      "id": "plumbing",
+      "label": "Plumbing",
+      "description": "General plumbing, pipework, drainage, and sanitary ware.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "dental_practice", "care_at_home",
+        "pub_bar", "restaurant", "gym", "office_building", "nursery"
+      ],
+      "pain_point_keywords": ["leak", "drainage", "boiler", "water pressure", "pipe", "sanitation"]
+    },
+    {
+      "id": "electrical",
+      "label": "Electrical",
+      "description": "Electrical installation, testing, EICR, emergency lighting, and small power.",
+      "certifications_required": ["NICEIC", "NAPIT", "Part P"],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "dental_practice", "care_at_home",
+        "pub_bar", "restaurant", "gym", "office_building", "nursery"
+      ],
+      "pain_point_keywords": ["EICR", "electrical test", "emergency lighting", "fuse board", "rewire", "PAT testing"]
+    },
+    {
+      "id": "roofing",
+      "label": "Roofing",
+      "description": "Flat and pitched roofing, guttering, fascias, and soffits.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "office_building", "pub_bar", "nursery"
+      ],
+      "pain_point_keywords": ["roof leak", "flat roof", "guttering", "fascia", "water ingress", "felt roof"]
+    },
+    {
+      "id": "decorating",
+      "label": "Decorating",
+      "description": "Interior and exterior painting, wallpapering, and surface preparation.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "dental_practice", "care_at_home",
+        "pub_bar", "restaurant", "gym", "office_building", "nursery"
+      ],
+      "pain_point_keywords": ["repaint", "refurbishment", "redecorate", "walls", "tired-looking", "refresh"]
+    },
+    {
+      "id": "flooring",
+      "label": "Flooring",
+      "description": "Supply and fitting of carpet, vinyl, LVT, hardwood, and safety flooring.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "gym", "office_building", "nursery", "dental_practice"
+      ],
+      "pain_point_keywords": ["flooring", "carpet", "vinyl", "LVT", "slip hazard", "safety flooring", "trip hazard"]
+    },
+    {
+      "id": "hvac",
+      "label": "HVAC",
+      "description": "Heating, ventilation, and air conditioning installation and maintenance.",
+      "certifications_required": ["Gas Safe", "F-Gas"],
+      "relevant_container_types": [
+        "hotel", "pub_bar", "restaurant", "gym", "office_building", "dental_practice"
+      ],
+      "pain_point_keywords": ["air conditioning", "ventilation", "heating system", "HVAC", "extraction", "temperature control"]
+    },
+    {
+      "id": "gas_safe",
+      "label": "Gas works",
+      "description": "Gas Safe registered works including boiler installation, servicing, and gas line maintenance.",
+      "certifications_required": ["Gas Safe"],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "pub_bar", "restaurant", "office_building"
+      ],
+      "pain_point_keywords": ["boiler", "gas safety certificate", "gas leak", "gas service", "annual gas check"]
+    },
+    {
+      "id": "fire_safety",
+      "label": "Fire safety",
+      "description": "Fire door installation and inspection, suppression systems, alarm installation, and fire risk assessment.",
+      "certifications_required": ["FIRAS", "BM TRADA"],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "office_building", "pub_bar", "gym"
+      ],
+      "pain_point_keywords": ["fire door", "fire alarm", "FRA", "suppression", "fire risk assessment", "fire compliance"]
+    },
+    {
+      "id": "carpentry",
+      "label": "Carpentry and joinery",
+      "description": "Bespoke joinery, door hanging, fitted furniture, and general carpentry.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "care_home", "hotel", "school", "office_building", "pub_bar", "nursery"
+      ],
+      "pain_point_keywords": ["doors", "joinery", "fitted", "bespoke", "woodwork", "skirting", "architrave"]
+    },
+    {
+      "id": "groundworks",
+      "label": "Groundworks and paving",
+      "description": "Car parks, pathways, drainage, and external hard landscaping.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "care_home", "school", "hotel", "office_building", "gym"
+      ],
+      "pain_point_keywords": ["car park", "pothole", "paving", "drainage", "pathway", "tarmac", "resurfacing"]
+    },
+    {
+      "id": "air_conditioning",
+      "label": "Air conditioning",
+      "description": "Split-system and VRF air conditioning installation, servicing, and F-Gas compliance.",
+      "certifications_required": ["F-Gas"],
+      "relevant_container_types": [
+        "dental_practice", "hotel", "office_building", "restaurant", "gym"
+      ],
+      "pain_point_keywords": ["air con", "cooling", "split system", "VRF", "F-Gas", "air conditioning service"]
+    },
+    {
+      "id": "commercial_kitchen",
+      "label": "Commercial kitchen",
+      "description": "Commercial kitchen installation, extraction canopy fitting, and equipment maintenance.",
+      "certifications_required": ["Gas Safe"],
+      "relevant_container_types": [
+        "restaurant", "pub_bar", "hotel", "school", "care_home"
+      ],
+      "pain_point_keywords": ["commercial kitchen", "extraction canopy", "kitchen fit-out", "catering equipment", "grease trap"]
+    },
+    {
+      "id": "fencing",
+      "label": "Fencing and security",
+      "description": "Perimeter fencing, gates, access control, and CCTV installation.",
+      "certifications_required": [],
+      "relevant_container_types": [
+        "school", "nursery", "care_home", "office_building", "gym"
+      ],
+      "pain_point_keywords": ["fencing", "perimeter", "gate", "access control", "security", "CCTV", "boundary"]
+    }
+  ]
+}
