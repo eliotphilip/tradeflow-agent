@@ -131,7 +131,8 @@ const runCampaign = async (rawClient) => {
       const score = await scoreLead(client, lead, approvedLeads || [], archivedLeads || []);
       scoredLeads.push({ ...lead, ...score });
     }
-
+const sampleScores = scoredLeads.slice(0, 5).map(l => `${l.business_name}: ${l.fit_score}`).join(' | ');
+console.log(`   Sample scores: ${sampleScores}`);
     const enrichmentCandidates = scoredLeads.filter(l => l.fit_score >= 50 && l.website);
     console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites`);
 
