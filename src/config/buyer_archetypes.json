@@ -1,0 +1,139 @@
+{
+  "version": "2.0.0",
+  "description": "Defines every buyer persona TradeFlow targets. Used by the email writer to select the right tone, opening hook, and pain points. Linked from container_types.json via buyer_archetype_ids.",
+  "buyer_archetypes": [
+    {
+      "id": "care_home_manager",
+      "label": "Care home manager",
+      "alt_titles": ["Registered manager", "Home manager", "Nominated individual"],
+      "container_types": ["care_home", "care_at_home"],
+      "seniority": "decision_maker",
+      "owns_budget": true,
+      "procurement_style": "relationship",
+      "tone": "warm_professional",
+      "primary_pain": "CQC compliance — a failed inspection or enforcement notice puts the registration at risk",
+      "secondary_pain": "No in-house maintenance team means every fault depends on finding a reliable contractor quickly",
+      "email_hook": "compliance_risk",
+      "subject_line_style": "direct_benefit",
+      "avoid": ["overly salesy language", "jargon-heavy intros", "price-first messaging"],
+      "example_openers": [
+        "Keeping on top of maintenance is one less thing to worry about before your next CQC visit.",
+        "We work with a number of registered managers in [area] who need contractors they can trust at short notice."
+      ]
+    },
+    {
+      "id": "facilities_coordinator",
+      "label": "Facilities coordinator",
+      "alt_titles": ["Facilities manager", "Estates manager", "Building manager", "Site manager"],
+      "container_types": ["care_home", "school", "gym", "office_building", "nursery"],
+      "seniority": "influencer",
+      "owns_budget": false,
+      "procurement_style": "process",
+      "tone": "practical_peer",
+      "primary_pain": "Managing multiple contractors across a site with no single reliable point of contact",
+      "secondary_pain": "Getting sign-off on spend means needing clear quotes and documented compliance",
+      "email_hook": "simplify_workload",
+      "subject_line_style": "problem_solution",
+      "avoid": ["pitching over their head to the CEO", "vague capability statements", "ignoring the compliance angle"],
+      "example_openers": [
+        "If you're managing maintenance across a busy site, we make it straightforward — one point of contact, fully documented.",
+        "We help facilities teams at [container type] keep on top of planned and reactive works without the back-and-forth."
+      ]
+    },
+    {
+      "id": "hospitality_manager",
+      "label": "Hospitality manager",
+      "alt_titles": ["Operations manager", "Property manager", "Maintenance manager", "Rooms manager"],
+      "container_types": ["hotel", "pub_bar", "restaurant"],
+      "seniority": "influencer",
+      "owns_budget": false,
+      "procurement_style": "relationship",
+      "tone": "practical_peer",
+      "primary_pain": "Guest-facing faults that need fixing before the next check-in or service",
+      "secondary_pain": "Works that overrun into trading hours cost more than the job itself",
+      "email_hook": "speed_and_reliability",
+      "subject_line_style": "problem_solution",
+      "avoid": ["lengthy intros", "focusing on price over speed", "generic contractor language"],
+      "example_openers": [
+        "We work around your trading hours — so a fault on Monday morning is sorted before your lunchtime covers.",
+        "Maintenance that fits around your guests, not the other way around."
+      ]
+    },
+    {
+      "id": "general_manager",
+      "label": "General manager",
+      "alt_titles": ["GM", "Managing director", "Owner", "Director", "Proprietor"],
+      "container_types": ["hotel", "pub_bar", "restaurant", "gym"],
+      "seniority": "decision_maker",
+      "owns_budget": true,
+      "procurement_style": "relationship",
+      "tone": "peer_to_peer",
+      "primary_pain": "Unplanned maintenance spend disrupting cash flow and operations",
+      "secondary_pain": "Compliance deadlines (gas safety, EICR, EHO) that can't be missed",
+      "email_hook": "business_continuity",
+      "subject_line_style": "direct_benefit",
+      "avoid": ["corporate tone", "long capability lists", "cold opener with no local hook"],
+      "example_openers": [
+        "Running a [container type] in [area] means maintenance can't wait — we're on call when you need us.",
+        "We keep [container type] owners in [area] compliant and operational without the hassle."
+      ]
+    },
+    {
+      "id": "school_business_manager",
+      "label": "School business manager",
+      "alt_titles": ["SBM", "Business manager", "Bursar", "School administrator"],
+      "container_types": ["school", "nursery"],
+      "seniority": "decision_maker",
+      "owns_budget": true,
+      "procurement_style": "process",
+      "tone": "formal_professional",
+      "primary_pain": "Coordinating works during term breaks on a fixed annual budget",
+      "secondary_pain": "Safeguarding obligations mean every contractor must be DBS-checked and site-inducted",
+      "email_hook": "compliance_and_scheduling",
+      "subject_line_style": "direct_benefit",
+      "avoid": ["informal tone", "last-minute pitch timing", "not mentioning DBS / safeguarding"],
+      "example_openers": [
+        "We work with schools across [area] to schedule maintenance during holidays — fully DBS-checked and Ofsted-aware.",
+        "Planning ahead for summer works? We help school business managers get quotes early and contractors confirmed."
+      ]
+    },
+    {
+      "id": "practice_manager",
+      "label": "Practice manager",
+      "alt_titles": ["Clinic manager", "Operations manager", "Office manager"],
+      "container_types": ["dental_practice", "care_at_home", "nursery"],
+      "seniority": "decision_maker",
+      "owns_budget": true,
+      "procurement_style": "relationship",
+      "tone": "warm_professional",
+      "primary_pain": "Any downtime in a clinical or regulated environment costs revenue and risks CQC compliance",
+      "secondary_pain": "Finding contractors who understand clinical environments and can work outside appointment hours",
+      "email_hook": "minimal_downtime",
+      "subject_line_style": "problem_solution",
+      "avoid": ["price-first messaging", "ignoring the clinical environment angle", "generic contractor pitch"],
+      "example_openers": [
+        "We carry out works outside your appointment hours so your patients never notice a thing.",
+        "Maintenance in a clinical environment needs the right contractor — we understand CQC requirements and work to your schedule."
+      ]
+    },
+    {
+      "id": "property_manager",
+      "label": "Property manager",
+      "alt_titles": ["Asset manager", "Portfolio manager", "Commercial property manager"],
+      "container_types": ["office_building"],
+      "seniority": "decision_maker",
+      "owns_budget": true,
+      "procurement_style": "process",
+      "tone": "formal_professional",
+      "primary_pain": "Managing compliance across a multi-site portfolio with reliable documented records",
+      "secondary_pain": "Tenant satisfaction depends on issues being resolved fast without disrupting neighbouring occupants",
+      "email_hook": "portfolio_efficiency",
+      "subject_line_style": "direct_benefit",
+      "avoid": ["single-site framing", "vague capability statements", "ignoring compliance documentation"],
+      "example_openers": [
+        "We support commercial property managers across [area] with planned maintenance, reactive cover, and full compliance documentation.",
+        "One contractor across your portfolio — EICR, gas safety, fabric maintenance — all documented and on file."
+      ]
+    }
+  ]
+}
