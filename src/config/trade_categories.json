@@ -1,139 +1,264 @@
 {
-  "version": "2.0.0",
-  "description": "Master list of trade categories TradeFlow can match leads against. Used by the email writer to personalise outreach and by the router to filter relevant container types per client.",
-  "trade_categories": [
+  "version": "1.0",
+  "description": "Canonical list of trades TradeFlow supports. Each trade maps to the container types where its buyers live.",
+  "trades": [
     {
-      "id": "plumbing",
-      "label": "Plumbing",
-      "description": "General plumbing, pipework, drainage, and sanitary ware.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "dental_practice", "care_at_home",
-        "pub_bar", "restaurant", "gym", "office_building", "nursery"
-      ],
-      "pain_point_keywords": ["leak", "drainage", "boiler", "water pressure", "pipe", "sanitation"]
+      "id": "joiner",
+      "display_name": "Joiner",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "main_contractor", "housing_association", "facilities_management", "architect", "letting_agency"],
+      "disqualifying_container_types": ["care_home", "kennel", "stable"]
     },
     {
-      "id": "electrical",
-      "label": "Electrical",
-      "description": "Electrical installation, testing, EICR, emergency lighting, and small power.",
-      "certifications_required": ["NICEIC", "NAPIT", "Part P"],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "dental_practice", "care_at_home",
-        "pub_bar", "restaurant", "gym", "office_building", "nursery"
-      ],
-      "pain_point_keywords": ["EICR", "electrical test", "emergency lighting", "fuse board", "rewire", "PAT testing"]
+      "id": "carpenter",
+      "display_name": "Carpenter",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "main_contractor", "housing_association", "facilities_management", "letting_agency"]
     },
     {
-      "id": "roofing",
-      "label": "Roofing",
-      "description": "Flat and pitched roofing, guttering, fascias, and soffits.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "office_building", "pub_bar", "nursery"
-      ],
-      "pain_point_keywords": ["roof leak", "flat roof", "guttering", "fascia", "water ingress", "felt roof"]
+      "id": "electrician",
+      "display_name": "Electrician",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "main_contractor", "housing_association", "facilities_management", "letting_agency", "corporate_office"]
     },
     {
-      "id": "decorating",
-      "label": "Decorating",
-      "description": "Interior and exterior painting, wallpapering, and surface preparation.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "dental_practice", "care_at_home",
-        "pub_bar", "restaurant", "gym", "office_building", "nursery"
-      ],
-      "pain_point_keywords": ["repaint", "refurbishment", "redecorate", "walls", "tired-looking", "refresh"]
+      "id": "plumber",
+      "display_name": "Plumber",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "main_contractor", "housing_association", "facilities_management", "letting_agency"]
     },
     {
-      "id": "flooring",
-      "label": "Flooring",
-      "description": "Supply and fitting of carpet, vinyl, LVT, hardwood, and safety flooring.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "gym", "office_building", "nursery", "dental_practice"
-      ],
-      "pain_point_keywords": ["flooring", "carpet", "vinyl", "LVT", "slip hazard", "safety flooring", "trip hazard"]
+      "id": "builder",
+      "display_name": "Builder / General Contractor",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "architect", "housing_association", "facilities_management", "letting_agency"]
     },
     {
-      "id": "hvac",
-      "label": "HVAC",
-      "description": "Heating, ventilation, and air conditioning installation and maintenance.",
-      "certifications_required": ["Gas Safe", "F-Gas"],
-      "relevant_container_types": [
-        "hotel", "pub_bar", "restaurant", "gym", "office_building", "dental_practice"
-      ],
-      "pain_point_keywords": ["air conditioning", "ventilation", "heating system", "HVAC", "extraction", "temperature control"]
+      "id": "plasterer",
+      "display_name": "Plasterer",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "main_contractor", "letting_agency", "housing_association"]
     },
     {
-      "id": "gas_safe",
-      "label": "Gas works",
-      "description": "Gas Safe registered works including boiler installation, servicing, and gas line maintenance.",
-      "certifications_required": ["Gas Safe"],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "pub_bar", "restaurant", "office_building"
-      ],
-      "pain_point_keywords": ["boiler", "gas safety certificate", "gas leak", "gas service", "annual gas check"]
+      "id": "painter_decorator",
+      "display_name": "Painter & Decorator",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "letting_agency", "housing_association", "facilities_management", "hotel"]
     },
     {
-      "id": "fire_safety",
-      "label": "Fire safety",
-      "description": "Fire door installation and inspection, suppression systems, alarm installation, and fire risk assessment.",
-      "certifications_required": ["FIRAS", "BM TRADA"],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "office_building", "pub_bar", "gym"
-      ],
-      "pain_point_keywords": ["fire door", "fire alarm", "FRA", "suppression", "fire risk assessment", "fire compliance"]
+      "id": "roofer",
+      "display_name": "Roofer",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "main_contractor", "housing_association", "facilities_management", "letting_agency"]
     },
     {
-      "id": "carpentry",
-      "label": "Carpentry and joinery",
-      "description": "Bespoke joinery, door hanging, fitted furniture, and general carpentry.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "care_home", "hotel", "school", "office_building", "pub_bar", "nursery"
-      ],
-      "pain_point_keywords": ["doors", "joinery", "fitted", "bespoke", "woodwork", "skirting", "architrave"]
+      "id": "landscaper",
+      "display_name": "Landscaper",
+      "category": "construction",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["property_developer", "hotel", "corporate_office", "housing_association", "letting_agency"]
     },
     {
-      "id": "groundworks",
-      "label": "Groundworks and paving",
-      "description": "Car parks, pathways, drainage, and external hard landscaping.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "care_home", "school", "hotel", "office_building", "gym"
-      ],
-      "pain_point_keywords": ["car park", "pothole", "paving", "drainage", "pathway", "tarmac", "resurfacing"]
+      "id": "web_designer",
+      "display_name": "Web Designer",
+      "category": "digital",
+      "business_model": "remote_capable",
+      "end_user_type": "businesses",
+      "target_container_types": ["small_business", "startup", "retail_chain", "hospitality_group", "professional_services"]
     },
     {
-      "id": "air_conditioning",
-      "label": "Air conditioning",
-      "description": "Split-system and VRF air conditioning installation, servicing, and F-Gas compliance.",
-      "certifications_required": ["F-Gas"],
-      "relevant_container_types": [
-        "dental_practice", "hotel", "office_building", "restaurant", "gym"
-      ],
-      "pain_point_keywords": ["air con", "cooling", "split system", "VRF", "F-Gas", "air conditioning service"]
+      "id": "web_developer",
+      "display_name": "Web Developer",
+      "category": "digital",
+      "business_model": "remote_capable",
+      "end_user_type": "businesses",
+      "target_container_types": ["startup", "ecommerce_business", "marketing_agency", "small_business", "professional_services"]
     },
     {
-      "id": "commercial_kitchen",
-      "label": "Commercial kitchen",
-      "description": "Commercial kitchen installation, extraction canopy fitting, and equipment maintenance.",
-      "certifications_required": ["Gas Safe"],
-      "relevant_container_types": [
-        "restaurant", "pub_bar", "hotel", "school", "care_home"
-      ],
-      "pain_point_keywords": ["commercial kitchen", "extraction canopy", "kitchen fit-out", "catering equipment", "grease trap"]
+      "id": "graphic_designer",
+      "display_name": "Graphic Designer",
+      "category": "digital",
+      "business_model": "remote_capable",
+      "end_user_type": "businesses",
+      "target_container_types": ["startup", "small_business", "marketing_agency", "retail_chain", "hospitality_group"]
     },
     {
-      "id": "fencing",
-      "label": "Fencing and security",
-      "description": "Perimeter fencing, gates, access control, and CCTV installation.",
-      "certifications_required": [],
-      "relevant_container_types": [
-        "school", "nursery", "care_home", "office_building", "gym"
-      ],
-      "pain_point_keywords": ["fencing", "perimeter", "gate", "access control", "security", "CCTV", "boundary"]
+      "id": "accountant",
+      "display_name": "Accountant",
+      "category": "professional_services",
+      "business_model": "remote_capable",
+      "end_user_type": "businesses",
+      "target_container_types": ["small_business", "startup", "letting_agency", "property_developer", "professional_services"]
+    },
+    {
+      "id": "bookkeeper",
+      "display_name": "Bookkeeper",
+      "category": "professional_services",
+      "business_model": "remote_capable",
+      "end_user_type": "businesses",
+      "target_container_types": ["small_business", "startup", "letting_agency", "retail_chain"]
+    },
+    {
+      "id": "marketing_consultant",
+      "display_name": "Marketing Consultant",
+      "category": "professional_services",
+      "business_model": "remote_capable",
+      "end_user_type": "businesses",
+      "target_container_types": ["startup", "small_business", "retail_chain", "hospitality_group", "professional_services"]
+    },
+    {
+      "id": "mobile_hairdresser",
+      "display_name": "Mobile Hairdresser",
+      "category": "personal_care",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["care_home", "hospice", "retirement_village", "hotel", "wedding_venue", "boarding_school", "corporate_office"],
+      "disqualifying_container_types": ["fleet_operator", "kennel", "stable"]
+    },
+    {
+      "id": "mobile_beautician",
+      "display_name": "Mobile Beautician",
+      "category": "personal_care",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["hotel", "wedding_venue", "corporate_office", "care_home", "retirement_village"]
+    },
+    {
+      "id": "mobile_nail_technician",
+      "display_name": "Mobile Nail Technician",
+      "category": "personal_care",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["care_home", "retirement_village", "wedding_venue", "hotel", "corporate_office"]
+    },
+    {
+      "id": "mobile_massage_therapist",
+      "display_name": "Mobile Massage Therapist",
+      "category": "wellness",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["hotel", "corporate_office", "sports_club", "care_home", "wedding_venue", "retirement_village"]
+    },
+    {
+      "id": "mobile_physiotherapist",
+      "display_name": "Mobile Physiotherapist",
+      "category": "health",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["care_home", "retirement_village", "sports_club", "corporate_office"]
+    },
+    {
+      "id": "mobile_chiropodist",
+      "display_name": "Mobile Chiropodist / Podiatrist",
+      "category": "health",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["care_home", "retirement_village", "hospice", "sheltered_housing"]
+    },
+    {
+      "id": "mobile_personal_trainer",
+      "display_name": "Mobile Personal Trainer",
+      "category": "fitness",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["corporate_office", "hotel", "sports_club", "retirement_village"]
+    },
+    {
+      "id": "mobile_yoga_instructor",
+      "display_name": "Mobile Yoga Instructor",
+      "category": "fitness",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["corporate_office", "hotel", "care_home", "school", "retirement_village"]
+    },
+    {
+      "id": "mobile_dog_groomer",
+      "display_name": "Mobile Dog Groomer",
+      "category": "pet_services",
+      "business_model": "mobile_consumer",
+      "end_user_type": "pets",
+      "target_container_types": ["kennel", "dog_daycare", "rescue_charity", "residential_block"]
+    },
+    {
+      "id": "mobile_mechanic",
+      "display_name": "Mobile Mechanic",
+      "category": "automotive",
+      "business_model": "mobile_b2b",
+      "end_user_type": "vehicles",
+      "target_container_types": ["fleet_operator", "dealership", "taxi_firm", "logistics_depot"]
+    },
+    {
+      "id": "mobile_valeter",
+      "display_name": "Mobile Valeter",
+      "category": "automotive",
+      "business_model": "mobile_b2b",
+      "end_user_type": "vehicles",
+      "target_container_types": ["fleet_operator", "dealership", "corporate_office", "hotel"]
+    },
+    {
+      "id": "private_music_tutor",
+      "display_name": "Private Music Tutor",
+      "category": "instructional",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["school", "care_home", "retirement_village", "corporate_office"]
+    },
+    {
+      "id": "private_tutor",
+      "display_name": "Private Academic Tutor",
+      "category": "instructional",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["school", "boarding_school"]
+    },
+    {
+      "id": "childrens_entertainer",
+      "display_name": "Children's Entertainer",
+      "category": "events",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["school", "nursery", "hotel", "wedding_venue"]
+    },
+    {
+      "id": "private_chef",
+      "display_name": "Private Chef",
+      "category": "food",
+      "business_model": "mobile_consumer",
+      "end_user_type": "individuals",
+      "target_container_types": ["hotel", "wedding_venue", "corporate_office"]
+    },
+    {
+      "id": "mobile_window_cleaner",
+      "display_name": "Window Cleaner",
+      "category": "cleaning",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["corporate_office", "retail_chain", "school", "care_home", "hotel", "residential_block"]
+    },
+    {
+      "id": "mobile_cleaner",
+      "display_name": "Domestic / Commercial Cleaner",
+      "category": "cleaning",
+      "business_model": "b2b_trade",
+      "end_user_type": "businesses",
+      "target_container_types": ["letting_agency", "corporate_office", "care_home", "hotel", "residential_block", "school"]
     }
   ]
 }
