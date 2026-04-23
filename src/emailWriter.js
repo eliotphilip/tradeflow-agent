@@ -11,7 +11,6 @@ import path from 'node:path';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load configs once
 let containerConfig = null;
 let archetypeConfig = null;
 
@@ -96,6 +95,25 @@ const buildContainerRubric = (container) => {
   return lines.join('\n');
 };
 
+const buildTradeSpecificRules = (client) => {
+  const lines = [];
+
+  if (client.trade_config?.scoring_notes) {
+    lines.push(`\n# TRADE-SPECIFIC SCORING RULES`);
+    lines.push(client.trade_config.scoring_notes);
+  }
+
+  if (client.no_website_is_positive) {
+    lines.push(`\nIMPORTANT: For this trade (${sanitize(client.trade)}), having NO website is a STRONG POSITIVE signal (+2). Do NOT penalise leads for missing websites.`);
+  }
+
+  if (client.startup_signal_positive) {
+    lines.push(`\nIMPORTANT: For this trade (${sanitize(client.trade)}), recently incorporated companies (within 2 years) are STRONG leads (+2). Check date_of_creation in the description.`);
+  }
+
+  return lines.join('\n');
+};
+
 const buildBuyerVoice = (archetype) => {
   if (!archetype) return 'Write professionally and directly. Respect their time.';
 
@@ -128,6 +146,11 @@ const buildRecipientContext = (lead) => {
   const lines = [`What you know about ${sanitize(lead.business_name)}:`];
   lines.push(`- Business type: ${sanitize(lead.container_type || lead.business_type || 'unknown')}`);
   lines.push(`- Location: ${sanitize(lead.city || 'unknown')}`);
+  lines.push(`- Has website: ${lead.website ? 'Yes' : 'No'}`);
+
+  if (lead.source_metadata?.date_of_creation) {
+    lines.push(`- Incorporated: ${lead.source_metadata.date_of_creation}`);
+  }
 
   if (lead.enrichment_data) {
     const e = lead.enrichment_data;
@@ -197,6 +220,7 @@ export const scoreLead = async (client, lead, previousApprovedLeads = [], previo
     const containers = await loadContainerConfig();
     const container = containers[lead.container_type] || null;
     const containerRubric = buildContainerRubric(container);
+    const tradeSpecificRules = buildTradeSpecificRules(client);
     const feedbackExamples = buildFeedbackExamples(previousApprovedLeads, previousArchivedLeads);
     const similarClientContext = buildSimilarClientContext(client.similar_client_profile);
 
@@ -218,6 +242,7 @@ export const scoreLead = async (client, lead, previousApprovedLeads = [], previo
 - Perfect lead: ${sanitize(client.perfect_lead_def) || 'Not specified'}
 - Disqualifiers: ${sanitize(client.disqualifiers) || 'None'}
 - Volume vs precision (1=volume 5=precision): ${client.volume_vs_precision || 3}
+${tradeSpecificRules}
 ${feedbackExamples}
 ${similarClientContext}
 
@@ -228,24 +253,26 @@ ${containerRubric}
 - Name: ${sanitize(lead.business_name)}
 - Container type: ${sanitize(lead.container_type || lead.business_type || 'unknown')}
 - Location: ${sanitize(lead.city || lead.address)}
-- Website: ${sanitize(lead.website) || 'None'}
+- Website: ${lead.website ? sanitize(lead.website) : 'NONE — no website found'}
 - Source: ${sanitize(lead.source)}
 - Description: ${sanitize(lead.description) || 'None'}
+- Incorporated: ${lead.source_metadata?.date_of_creation || 'unknown'}
 ${enrichmentContext}
 
 SCORING RULES:
 - Use the container rubric signals above to score
+- Apply any trade-specific rules above — these override general logic
 - Score 0-10, show your math
 - Apply disqualifiers absolutely
 - Check against perfect lead definition
-- If similar client profile is provided, add +1 to score if this lead closely resembles those examples
+- If similar client profile is provided, add +1 if this lead closely resembles those examples
 
 Priority mapping for volume_vs_precision=${client.volume_vs_precision || 3}:
 - 1-2: hot=7+, warm=4-6, cold=2-3, pass=0-1
 - 3: hot=8+, warm=5-7, cold=2-4, pass=0-1
 - 4-5: hot=9+, warm=6-8, cold=3-5, pass=0-2
 
-Return ONLY valid JSON, double quotes only, no extra text before or after:
+Return ONLY valid JSON, double quotes only, no text before or after the JSON object:
 {
   "fit_score": 0,
   "fit_reason": "max 10 words",
@@ -254,12 +281,12 @@ Return ONLY valid JSON, double quotes only, no extra text before or after:
   "is_startup": false
 }`;
 
-   const response = await anthropic.messages.create({
-  model: 'claude-haiku-4-5-20251001',
-  max_tokens: 500,
-  system: 'You are a lead scoring API. You respond only with valid JSON. No explanation, no markdown, no text outside the JSON object.',
-  messages: [{ role: 'user', content: prompt }],
-});
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: 'You are a lead scoring API. Respond only with a valid JSON object. No explanation, no markdown, no text outside the JSON.',
+      messages: [{ role: 'user', content: prompt }],
+    });
 
     const text = response.content[0].text
       .replace(/```json|```/g, '')
@@ -273,6 +300,7 @@ Return ONLY valid JSON, double quotes only, no extra text before or after:
       fit_reason: result.fit_reason || 'No reason provided',
       matches_perfect_lead_def: result.matches_perfect_lead_def || false,
       similar_client_match: result.similar_client_match || false,
+      is_startup: result.is_startup || false,
     };
 
   } catch (err) {
@@ -285,8 +313,42 @@ Return ONLY valid JSON, double quotes only, no extra text before or after:
       fit_reason: 'Fallback scoring used',
       matches_perfect_lead_def: false,
       similar_client_match: false,
+      is_startup: false,
     };
   }
+};
+
+// ============================================
+// TEMPLATE MODE HELPERS
+// ============================================
+
+const getActiveTemplate = (templates) => {
+  if (!templates?.length) return null;
+  return templates.find(t => t.active) || templates[0];
+};
+
+const applyTemplate = (template, lead, client) => {
+  const tokens = {
+    '[business_name]': lead.business_name || '',
+    '[contact_name]': lead.contact_name || '',
+    '[city]': lead.city || '',
+    '[trade]': client.trade || '',
+    '[client_name]': client.business_name || client.trade || '',
+  };
+
+  const replace = (str) => {
+    if (!str) return '';
+    return Object.entries(tokens).reduce(
+      (out, [token, value]) => out.replaceAll(token, value),
+      str
+    );
+  };
+
+  return {
+    email_subject: replace(template.subject),
+    email_body: replace(template.body),
+    follow_up_body: replace(template.follow_up),
+  };
 };
 
 // ============================================
@@ -294,6 +356,16 @@ Return ONLY valid JSON, double quotes only, no extra text before or after:
 // ============================================
 export const writeEmail = async (client, lead) => {
   console.log(`✍️  Writing email for ${lead.business_name}...`);
+
+  // Template mode — skip Haiku entirely, just apply token substitution
+  if (client.email_mode === 'template') {
+    const template = getActiveTemplate(client.email_templates);
+    if (template) {
+      console.log(`   📋 Using template: ${template.name || 'default'}`);
+      return applyTemplate(template, lead, client);
+    }
+    console.log(`   ⚠️  Template mode set but no template found — falling back to AI`);
+  }
 
   try {
     const archetypes = await loadArchetypeConfig();
@@ -303,6 +375,15 @@ export const writeEmail = async (client, lead) => {
     const buyerVoice = buildBuyerVoice(archetype);
     const recipientContext = buildRecipientContext(lead);
     const signOff = buildSignOff(client);
+
+    // For no-website leads (web designer etc) craft the hook around that specifically
+    const noWebsiteHook = client.no_website_is_positive && !lead.website
+      ? `\nNOTE: This business has no website — this is why you are contacting them. Reference this naturally in the email without being blunt about it. e.g. "We noticed you don't have a website yet" or "As a new business, getting online is one of the first things that pays off."`
+      : '';
+
+    const startupHook = client.startup_signal_positive && lead.is_startup
+      ? `\nNOTE: This is a recently incorporated business. Reference being new as a natural hook — new businesses have a lot to set up and you can help them get started right.`
+      : '';
 
     const prompt = `You are ${sanitize(client.business_name || client.trade)} writing a short cold outreach email.
 
@@ -314,6 +395,8 @@ ${buyerVoice}
 
 # WHAT YOU KNOW ABOUT THE RECIPIENT
 ${recipientContext}
+${noWebsiteHook}
+${startupHook}
 
 # YOUR TASK
 Write a short professional email introducing yourself to ${sanitize(lead.business_name)}.
@@ -321,7 +404,7 @@ Write a short professional email introducing yourself to ${sanitize(lead.busines
 RULES:
 1. Open with "Hi, we are ${sanitize(client.business_name || client.trade)},"
 2. First paragraph: one sentence — what you do and where you are based
-3. Second paragraph: why you are contacting THIS specific organisation — use enrichment data if available, reference something specific. Never generic industry observations.
+3. Second paragraph: why you are contacting THIS specific organisation — use enrichment data or the hooks above if available. Never generic industry observations.
 4. Third paragraph: one simple low-pressure ask
 5. End with this sign-off:
 ${signOff}
