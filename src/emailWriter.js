@@ -256,11 +256,12 @@ Return ONLY valid JSON, double quotes only:
   "similar_client_match": false
 }`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      messages: [{ role: 'user', content: prompt }],
-    });
+   const response = await anthropic.messages.create({
+  model: 'claude-haiku-4-5-20251001',
+  max_tokens: 500,
+  system: 'You are a lead scoring API. You respond only with valid JSON. No explanation, no markdown, no text outside the JSON object.',
+  messages: [{ role: 'user', content: prompt }],
+});
 
     const text = response.content[0].text
       .replace(/```json|```/g, '')
