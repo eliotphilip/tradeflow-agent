@@ -277,7 +277,6 @@ Return ONLY valid JSON, double quotes only, no text before or after the JSON obj
   "fit_score": 0,
   "fit_reason": "max 10 words",
   "matches_perfect_lead_def": false,
-  "similar_client_match": false,
   "is_startup": false
 }`;
 
@@ -295,11 +294,18 @@ Return ONLY valid JSON, double quotes only, no text before or after the JSON obj
       .trim();
 
     const result = JSON.parse(text);
+
+    // Determine similar_client_match deterministically in code —
+    // more reliable than asking Haiku to judge similarity
+    const similarContainers = client.similar_client_profile?.container_type_hints ?? [];
+    const similarClientMatch = similarContainers.length > 0 &&
+      similarContainers.includes(lead.container_type);
+
     return {
       fit_score: Math.max(0, Math.min(100, (result.fit_score || 0) * 10)),
       fit_reason: result.fit_reason || 'No reason provided',
       matches_perfect_lead_def: result.matches_perfect_lead_def || false,
-      similar_client_match: result.similar_client_match || false,
+      similar_client_match: similarClientMatch,
       is_startup: result.is_startup || false,
     };
 
@@ -308,11 +314,12 @@ Return ONLY valid JSON, double quotes only, no text before or after the JSON obj
     let score = 40;
     if (lead.website) score += 10;
     if (lead.enrichment_data) score += 10;
+    const similarContainers = client.similar_client_profile?.container_type_hints ?? [];
     return {
       fit_score: score,
       fit_reason: 'Fallback scoring used',
       matches_perfect_lead_def: false,
-      similar_client_match: false,
+      similar_client_match: similarContainers.includes(lead.container_type),
       is_startup: false,
     };
   }
