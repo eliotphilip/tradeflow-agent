@@ -1,6 +1,5 @@
 // src/index.js
 // Main orchestrator - runs the full lead generation pipeline
-// Uses the container/router architecture for smart lead finding
 
 import { createClient } from '@supabase/supabase-js';
 import { EventEmitter } from 'events';
@@ -33,11 +32,24 @@ const runCampaign = async (rawClient) => {
   console.log(`   Trade: ${rawClient.trade} | Location: ${rawClient.location}`);
 
   // STEP 0: Enhance client profile
+  // — fixes grammar, resolves trade config flags, builds similar client profile
   const client = await enhanceClientProfile(rawClient);
 
-  // Determine search mode from location_radius
   const nationwide = !client.location_radius || client.location_radius >= 100;
   console.log(`   Mode: ${nationwide ? '🌍 nationwide' : `📍 local (${client.location_radius || 20} miles)`}`);
+
+  if (client.qualify_without_contact) {
+    console.log(`   ⚡ qualify_without_contact=true — leads without website/email/phone will still qualify`);
+  }
+  if (client.no_website_is_positive) {
+    console.log(`   ⚡ no_website_is_positive=true — missing website is a positive scoring signal`);
+  }
+  if (client.startup_signal_positive) {
+    console.log(`   ⚡ startup_signal_positive=true — recently incorporated companies scored higher`);
+  }
+  if (client.similar_client_profile) {
+    console.log(`   🔗 Similar client profile built from ${client.similar_client_profile.source_count} URL(s)`);
+  }
 
   if (!client.target_container_types?.length) {
     console.log('⚠️  No target_container_types set — client needs to complete onboarding');
@@ -55,7 +67,7 @@ const runCampaign = async (rawClient) => {
   }
 
   try {
-    // STEP 1: Find leads using the router
+    // STEP 1: Find leads via router
     console.log('\n📍 Step 1: Finding leads...');
 
     const { leads: allLeads, stats } = await fetchLeadsForClient({
@@ -68,12 +80,6 @@ const runCampaign = async (rawClient) => {
     if (stats.errors?.length > 0) {
       stats.errors.forEach(e => console.log(`   ⚠️  Error: ${e.source}/${e.container}: ${e.error}`));
     }
-
-    // Log breakdown by source
-    const gmCount = allLeads.filter(l => l.source === 'google_maps').length;
-    const chCount = allLeads.filter(l => l.source === 'companies_house').length;
-    const cqcCount = allLeads.filter(l => l.source === 'cqc').length;
-    console.log(`   Google Maps: ${gmCount} | Companies House: ${chCount} | CQC: ${cqcCount}`);
 
     // STEP 2: Filter out existing leads
     console.log('\n🔍 Checking for existing leads...');
@@ -125,17 +131,9 @@ const runCampaign = async (rawClient) => {
     console.log(`   ✅ ${approvedLeads?.length || 0} approved, ${archivedLeads?.length || 0} archived for calibration`);
 
     // STEP 4: Cap leads before scoring
-    // Prioritise Google Maps leads — they have websites and are higher quality
-    // CQC leads next — verified organisations
-    // Companies House last — broadest but least filtered
     const scoringCap = getScoringCap(client.volume_vs_precision);
-    const sortedNewLeads = [
-      ...newLeads.filter(l => l.source === 'google_maps'),
-      ...newLeads.filter(l => l.source === 'cqc'),
-      ...newLeads.filter(l => l.source === 'companies_house'),
-    ];
-    const leadsToScore = sortedNewLeads.slice(0, scoringCap);
-    console.log(`\n📊 Scoring cap: ${scoringCap} leads (${leadsToScore.filter(l => l.source === 'google_maps').length} Maps, ${leadsToScore.filter(l => l.source === 'cqc').length} CQC, ${leadsToScore.filter(l => l.source === 'companies_house').length} CH)`);
+    const leadsToScore = newLeads.slice(0, scoringCap);
+    console.log(`\n📊 Scoring cap: ${scoringCap} leads`);
 
     // STEP 5: Initial scoring
     console.log('🎯 Scoring leads...');
@@ -146,14 +144,16 @@ const runCampaign = async (rawClient) => {
       scoredLeads.push({ ...lead, ...score });
     }
 
-    // Debug — show sample scores
-    const sampleScores = scoredLeads.slice(0, 5).map(l => `${l.business_name}: ${l.fit_score}`).join(' | ');
-    console.log(`   Sample scores: ${sampleScores}`);
+    // STEP 6: Enrichment candidates
+    // For trades where no_website_is_positive=true, we skip enrichment filtering by website
+    // (there won't be websites to enrich — that's the point)
+    const enrichmentCandidates = client.no_website_is_positive
+      ? scoredLeads.filter(l => l.fit_score >= 50 && l.website)
+      : scoredLeads.filter(l => l.fit_score >= 50 && l.website);
 
-    const enrichmentCandidates = scoredLeads.filter(l => l.fit_score >= 30 && l.website);
-    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 30).length} above threshold, ${enrichmentCandidates.length} have websites`);
+    console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites for enrichment`);
 
-    // STEP 6: Firecrawl enrichment
+    // STEP 7: Firecrawl enrichment
     let enrichedLeads = scoredLeads;
 
     if (FIRECRAWL_ENABLED && enrichmentCandidates.length > 0) {
@@ -196,13 +196,25 @@ const runCampaign = async (rawClient) => {
       enrichedLeads = reScored;
     }
 
-    // STEP 7: Filter and rank — threshold lowered to 30
+    // STEP 8: Filter and rank
+    // qualify_without_contact=true: only require fit_score threshold, no contact info needed
+    // qualify_without_contact=false (default): require website OR phone OR email
     const qualifiedLeads = enrichedLeads
-      .filter(l => l.fit_score >= 30)
-      .filter(l => l.website || l.phone || l.email)
+      .filter(l => {
+        if (l.fit_score < 50) return false;
+        if (client.qualify_without_contact) return true;
+        return l.website || l.phone || l.email;
+      })
       .sort((a, b) => {
+        // Sort order: perfect match > startup (if relevant) > similar client > enriched > score
         if (b.matches_perfect_lead_def && !a.matches_perfect_lead_def) return 1;
         if (a.matches_perfect_lead_def && !b.matches_perfect_lead_def) return -1;
+        if (client.startup_signal_positive) {
+          if (b.is_startup && !a.is_startup) return 1;
+          if (a.is_startup && !b.is_startup) return -1;
+        }
+        if (b.similar_client_match && !a.similar_client_match) return 1;
+        if (a.similar_client_match && !b.similar_client_match) return -1;
         if (b.enrichment_data && !a.enrichment_data) return 1;
         if (a.enrichment_data && !b.enrichment_data) return -1;
         return b.fit_score - a.fit_score;
@@ -210,10 +222,15 @@ const runCampaign = async (rawClient) => {
       .slice(0, 40);
 
     const perfectMatches = qualifiedLeads.filter(l => l.matches_perfect_lead_def).length;
+    const similarMatches = qualifiedLeads.filter(l => l.similar_client_match).length;
+    const startupMatches = qualifiedLeads.filter(l => l.is_startup).length;
     const enrichedCount = qualifiedLeads.filter(l => l.enrichment_data).length;
-    console.log(`\n✅ Qualified: ${qualifiedLeads.length} leads (${perfectMatches} perfect ⭐, ${enrichedCount} enriched 🌐)`);
+    const noWebsiteCount = qualifiedLeads.filter(l => !l.website).length;
 
-    // STEP 8: Calculate distances (local only)
+    console.log(`\n✅ Qualified: ${qualifiedLeads.length} leads`);
+    console.log(`   ⭐ Perfect: ${perfectMatches} | ✓ Similar: ${similarMatches} | 🆕 Startup: ${startupMatches} | 🌐 Enriched: ${enrichedCount}${client.no_website_is_positive ? ` | 🚫🌐 No website: ${noWebsiteCount}` : ''}`);
+
+    // STEP 9: Calculate distances (local only)
     const shouldCalculateDistance = !nationwide && client.location_radius;
     let leadsWithDistances = [];
 
@@ -233,7 +250,7 @@ const runCampaign = async (rawClient) => {
       leadsWithDistances = qualifiedLeads.map(l => ({ ...l, distance_miles: null }));
     }
 
-    // STEP 9: Write emails
+    // STEP 10: Write emails
     console.log('\n✍️  Writing personalised emails...');
     const leadsWithEmails = [];
 
@@ -243,7 +260,7 @@ const runCampaign = async (rawClient) => {
       await sleep(300);
     }
 
-    // STEP 10: Save to Supabase
+    // STEP 11: Save to Supabase
     console.log('\n💾 Saving leads to database...');
     const batches = chunkArray(leadsWithEmails, 10);
     let savedCount = 0;
@@ -270,6 +287,8 @@ const runCampaign = async (rawClient) => {
         fit_reason: lead.fit_reason,
         distance_miles: lead.distance_miles || null,
         matches_perfect_lead_def: lead.matches_perfect_lead_def || false,
+        similar_client_match: lead.similar_client_match || false,
+        is_startup: lead.is_startup || false,
         enrichment_data: lead.enrichment_data || null,
         enrichment_status: lead.enrichment_status || null,
         enriched_at: lead.enrichment_data ? new Date().toISOString() : null,
@@ -292,7 +311,7 @@ const runCampaign = async (rawClient) => {
 
     console.log(`✅ Saved ${savedCount} leads`);
 
-    // STEP 11: Update records
+    // STEP 12: Update records
     await supabase.from('campaigns').update({
       status: 'complete',
       leads_found: allLeads.length,
@@ -305,7 +324,7 @@ const runCampaign = async (rawClient) => {
       .update({ last_campaign_run: new Date().toISOString() })
       .eq('id', client.id);
 
-    console.log(`\n🎉 Campaign complete! Found: ${allLeads.length} | Qualified: ${qualifiedLeads.length} | Perfect: ${perfectMatches} ⭐ | Enriched: ${enrichedCount} 🌐 | Saved: ${savedCount}`);
+    console.log(`\n🎉 Campaign complete! Found: ${allLeads.length} | Qualified: ${qualifiedLeads.length} | Saved: ${savedCount}`);
 
   } catch (err) {
     console.error('Campaign failed:', err.message);
@@ -374,11 +393,7 @@ const main = async () => {
   console.log('\n✅ All campaigns complete');
 };
 
-// ============================================
-// HELPERS
-// ============================================
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 const chunkArray = (arr, size) => {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
