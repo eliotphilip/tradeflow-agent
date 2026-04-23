@@ -245,15 +245,13 @@ Priority mapping for volume_vs_precision=${client.volume_vs_precision || 3}:
 - 3: hot=8+, warm=5-7, cold=2-4, pass=0-1
 - 4-5: hot=9+, warm=6-8, cold=3-5, pass=0-2
 
-Return ONLY valid JSON, double quotes only:
+Return ONLY valid JSON, double quotes only, no extra text before or after:
 {
   "fit_score": 0,
-  "fit_reason": "brief math explanation",
-  "priority": "hot|warm|cold|pass",
-  "top_signals": [],
-  "disqualifiers_found": [],
+  "fit_reason": "max 10 words",
   "matches_perfect_lead_def": false,
-  "similar_client_match": false
+  "similar_client_match": false,
+  "is_startup": false
 }`;
 
    const response = await anthropic.messages.create({
