@@ -1,7 +1,7 @@
 // src/enrichment/firecrawl.js
 // Enriches leads by scraping their websites using Firecrawl
 // Caches results in website_enrichments table — never scrapes the same domain twice
-// Falls back to contact page if homepage has no email
+// Contact page fallback: if no email on homepage, tries /contact, /contact-us, /about, /about-us
 
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { createClient } from '@supabase/supabase-js';
@@ -13,6 +13,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// What we want to extract from each website
 const ENRICHMENT_SCHEMA = {
   type: 'object',
   properties: {
@@ -28,7 +29,7 @@ const ENRICHMENT_SCHEMA = {
     specialisms: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Niche or specialist areas.',
+      description: 'Niche or specialist areas e.g. listed buildings, residential extensions.',
     },
     team_size_signal: {
       type: 'string',
@@ -94,16 +95,6 @@ const ENRICHMENT_SCHEMA = {
   required: ['one_liner', 'services', 'team_size_signal', 'personalization_hooks'],
 };
 
-// Minimal schema just for extracting contact details from contact pages
-const CONTACT_SCHEMA = {
-  type: 'object',
-  properties: {
-    email: { type: ['string', 'null'] },
-    phone: { type: ['string', 'null'] },
-    contact_name: { type: ['string', 'null'] },
-  },
-};
-
 const EXTRACTION_PROMPT = `
 You are enriching a B2B lead profile from a company website.
 Extract only information visibly present on the page. Never fabricate.
@@ -112,22 +103,33 @@ If a field is not present set it to null or empty array.
 Rules:
 - one_liner: what they DO not what they claim. Facts over adjectives.
 - personalization_hooks: each must include a source_quote — exact phrase from the site. No quote = don't include it.
-- Avoid RAMS, ISO certifications, H&S policies — too technical for cold email personalisation.
 - decision_maker: only populate if name AND title are clearly associated with leadership. Otherwise leave null.
-- contact.email: look carefully in footer, contact links, mailto links, and anywhere on the page.
-- contact.phone: look in header, footer, contact sections.
+- contact.email: look carefully everywhere — footer, header, contact section, mailto links, sidebar, anywhere on the page. This is critical.
+- contact.phone: same — check everywhere including footer and header.
 `.trim();
 
-const CONTACT_EXTRACTION_PROMPT = `
-Extract contact information from this page.
-Look carefully for email addresses in: mailto links, text containing @, footer, contact forms, staff listings.
-Look for phone numbers anywhere on the page.
-Never fabricate. If not found set to null.
+// Minimal schema just for contact page scraping — faster and cheaper
+const CONTACT_SCHEMA = {
+  type: 'object',
+  properties: {
+    email: { type: ['string', 'null'] },
+    phone: { type: ['string', 'null'] },
+  },
+  required: ['email'],
+};
+
+const CONTACT_PROMPT = `
+Extract the contact email address and phone number from this page.
+Look in the page body, footer, header, mailto links, and any contact forms.
+Return null if not found. Never fabricate.
 `.trim();
 
 const WRAPPER_TIMEOUT_MS = 45000;
 const DEFAULT_TIMEOUT_MS = 30000;
 const MAX_RETRIES = 2;
+
+// Contact pages to try if no email found on homepage
+const CONTACT_PAGE_PATHS = ['/contact', '/contact-us', '/about', '/about-us', '/get-in-touch'];
 
 // ============================================
 // HELPERS
@@ -209,24 +211,92 @@ const saveToCache = async (domain, url, enrichmentResult) => {
         error: enrichmentResult.error,
         scraped_at: new Date().toISOString(),
         credits_used: 5,
-      }, { onConflict: 'domain' });
+      }, {
+        onConflict: 'domain',
+      });
   } catch (err) {
     console.error(`Cache save failed for ${domain}:`, err.message);
   }
 };
 
 // ============================================
-// SCRAPE
+// CONTACT PAGE FALLBACK
+// Tries contact/about pages if homepage had no email
 // ============================================
 
-const scrapeUrl = async (url, schema, prompt) => {
+const scrapeContactPage = async (baseUrl, path) => {
+  try {
+    const contactUrl = new URL(path, baseUrl).href;
+
+    const result = await withTimeout(
+      firecrawl.scrapeUrl(contactUrl, {
+        formats: ['json'],
+        jsonOptions: {
+          prompt: CONTACT_PROMPT,
+          schema: CONTACT_SCHEMA,
+        },
+        // Include full page including footer — that's where emails live
+        onlyMainContent: false,
+        waitFor: 1500,
+        timeout: 15000,
+      }),
+      20000,
+      `contact:${contactUrl}`
+    );
+
+    const email = result?.json?.email ?? null;
+    const phone = result?.json?.phone ?? null;
+
+    if (email) {
+      console.log(`   📧 Found email on ${path}`);
+    }
+
+    return { email, phone };
+  } catch {
+    return { email: null, phone: null };
+  }
+};
+
+const findEmailViaContactPages = async (url, existingData) => {
+  console.log(`   📧 No email on homepage — checking contact pages...`);
+
+  for (const path of CONTACT_PAGE_PATHS) {
+    const { email, phone } = await scrapeContactPage(url, path);
+    if (email) {
+      // Merge email/phone into existing enrichment data
+      return {
+        ...existingData,
+        contact: {
+          ...existingData?.contact,
+          email,
+          phone: existingData?.contact?.phone || phone,
+        },
+      };
+    }
+    await sleep(500);
+  }
+
+  return existingData;
+};
+
+// ============================================
+// MAIN SCRAPE
+// onlyMainContent: false — includes footer/header where emails typically live
+// ============================================
+
+const scrapeWebsite = async (url) => {
   const startedAt = Date.now();
 
   const result = await withTimeout(
     firecrawl.scrapeUrl(url, {
       formats: ['markdown', 'json'],
-      jsonOptions: { prompt, schema },
-      onlyMainContent: true,
+      jsonOptions: {
+        prompt: EXTRACTION_PROMPT,
+        schema: ENRICHMENT_SCHEMA,
+      },
+      // false = include full page including footer/header/sidebar
+      // This is critical for email extraction — most small business emails are in the footer
+      onlyMainContent: false,
       waitFor: 2000,
       timeout: DEFAULT_TIMEOUT_MS,
     }),
@@ -239,28 +309,6 @@ const scrapeUrl = async (url, schema, prompt) => {
     data: result?.json ?? null,
     source_url: result?.metadata?.sourceURL ?? result?.metadata?.url ?? url,
   };
-};
-
-// Try to find email from contact pages if homepage didn't have one
-const tryContactPages = async (baseUrl) => {
-  const contactPaths = ['/contact', '/contact-us', '/about', '/about-us', '/get-in-touch'];
-
-  for (const path of contactPaths) {
-    try {
-      const contactUrl = baseUrl.replace(/\/$/, '') + path;
-      const { data } = await scrapeUrl(contactUrl, CONTACT_SCHEMA, CONTACT_EXTRACTION_PROMPT);
-
-      if (data?.email) {
-        console.log(`   📧 Found email on ${path}`);
-        return { email: data.email, phone: data.phone || null };
-      }
-    } catch {
-      // Page not found or error — try next
-    }
-    await sleep(500);
-  }
-
-  return null;
 };
 
 // ============================================
@@ -291,15 +339,14 @@ export const enrichLead = async (lead) => {
     };
   }
 
-  // Not in cache — scrape
   console.log(`   🔍 Enriching ${domain}...`);
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
     try {
-      const { data, duration_ms, source_url } = await scrapeUrl(url, ENRICHMENT_SCHEMA, EXTRACTION_PROMPT);
+      const { data, duration_ms, source_url } = await scrapeWebsite(url);
 
-      // Validate domain
+      // Validate domain matches
       if (source_url && !isSameDomain(url, source_url)) {
         const result = {
           enrichment_status: 'domain_mismatch',
@@ -321,25 +368,20 @@ export const enrichLead = async (lead) => {
       }
 
       // If no email found on homepage, try contact pages
-      if (data && !data.contact?.email) {
-        console.log(`   📧 No email on homepage — checking contact pages...`);
-        const contactInfo = await tryContactPages(url);
-        if (contactInfo) {
-          data.contact = {
-            email: contactInfo.email,
-            phone: contactInfo.phone || data.contact?.phone || null,
-          };
-        }
+      let enrichedData = data;
+      if (!data?.contact?.email) {
+        enrichedData = await findEmailViaContactPages(url, data);
       }
 
+      const emailFound = !!enrichedData?.contact?.email;
       const result = {
         enrichment_status: 'success',
-        enrichment_data: data,
+        enrichment_data: enrichedData,
         error: null,
       };
 
       await saveToCache(domain, url, result);
-      console.log(`   ✅ Enriched ${domain} in ${duration_ms}ms${data?.contact?.email ? ' (email found)' : ''}`);
+      console.log(`   ✅ Enriched ${domain} in ${duration_ms}ms${emailFound ? ' (email found)' : ''}`);
       return result;
 
     } catch (err) {
@@ -377,7 +419,7 @@ export const enrichLead = async (lead) => {
 };
 
 // ============================================
-// BATCH ENRICHMENT
+// BATCH ENRICHMENT — bounded concurrency
 // ============================================
 
 export const enrichLeadsBatch = async (leads, { concurrency = 3 } = {}) => {
