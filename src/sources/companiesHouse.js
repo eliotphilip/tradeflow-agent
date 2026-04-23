@@ -88,9 +88,17 @@ export async function fetchLeads({ container, client, limit = 60 }) {
   const leads = [];
   const seenNumbers = new Set();
 
+  // Merge container SIC codes with any SIC hints from similar client profile
+  const containerSicCodes = container.companies_house_sic ?? [];
+  const similarClientSicCodes = client.similar_client_profile?.sic_codes ?? [];
+  const allSicCodes = [...new Set([...containerSicCodes, ...similarClientSicCodes])];
+
+  if (similarClientSicCodes.length > 0) {
+    console.log(`   🔗 Adding ${similarClientSicCodes.length} SIC code(s) from similar client profile`);
+  }
+
   // Search by SIC codes first
-  const sicCodes = container.companies_house_sic ?? [];
-  for (const sic of sicCodes.slice(0, 3)) {
+  for (const sic of allSicCodes.slice(0, 5)) {
     if (leads.length >= limit) break;
     const searchTerm = nationwide ? sic : `${sic} ${client.location}`;
     const url = `${CH_BASE_URL}/search/companies?q=${encodeURIComponent(searchTerm)}&items_per_page=20`;
@@ -114,6 +122,9 @@ export async function fetchLeads({ container, client, limit = 60 }) {
         const directors = officers.filter(o => o.officer_role === 'director' && !o.resigned_on);
         const contactName = directors.length > 0 ? formatName(directors[0].name) : null;
 
+        // Flag if this lead was found via a similar client SIC code
+        const foundViaSimilarClient = similarClientSicCodes.includes(sic);
+
         leads.push({
           source: 'companies_house',
           source_id: company.company_number,
@@ -132,6 +143,7 @@ export async function fetchLeads({ container, client, limit = 60 }) {
             company_type: company.company_type,
             sic_codes: company.sic_codes,
             date_of_creation: company.date_of_creation,
+            found_via_similar_client: foundViaSimilarClient,
           },
         });
       }
@@ -144,7 +156,12 @@ export async function fetchLeads({ container, client, limit = 60 }) {
   // Keyword searches if needed
   if (leads.length < limit) {
     const queries = await generateSearchQueries(container, client);
-    for (const query of queries) {
+
+    // Add similar client keywords to keyword searches if available
+    const similarClientKeywords = client.similar_client_profile?.keywords ?? [];
+    const allQueries = [...new Set([...queries, ...similarClientKeywords.slice(0, 2)])];
+
+    for (const query of allQueries) {
       if (leads.length >= limit) break;
       const results = await searchCompanies(query, client.location, apiKey, nationwide);
 
@@ -157,6 +174,8 @@ export async function fetchLeads({ container, client, limit = 60 }) {
         const officers = await getCompanyOfficers(company.company_number, apiKey);
         const directors = officers.filter(o => o.officer_role === 'director' && !o.resigned_on);
         const contactName = directors.length > 0 ? formatName(directors[0].name) : null;
+
+        const foundViaSimilarClient = similarClientKeywords.includes(query);
 
         leads.push({
           source: 'companies_house',
@@ -175,6 +194,7 @@ export async function fetchLeads({ container, client, limit = 60 }) {
           source_metadata: {
             company_type: company.company_type,
             sic_codes: company.sic_codes,
+            found_via_similar_client: foundViaSimilarClient,
           },
         });
       }
