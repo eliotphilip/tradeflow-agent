@@ -20,8 +20,8 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const FIRECRAWL_ENABLED = !!process.env.FIRECRAWL_API_KEY;
 
 const getScoringCap = (volumeVsPrecision) => {
-  const caps = { 1: 80, 2: 60, 3: 50, 4: 35, 5: 20 };
-  return caps[volumeVsPrecision] || 50;
+  const caps = { 1: 150, 2: 120, 3: 100, 4: 60, 5: 40 };
+  return caps[volumeVsPrecision] || 100;
 };
 
 // ============================================
@@ -148,8 +148,8 @@ const runCampaign = async (rawClient) => {
     // For trades where no_website_is_positive=true, we skip enrichment filtering by website
     // (there won't be websites to enrich — that's the point)
     const enrichmentCandidates = client.no_website_is_positive
-      ? scoredLeads.filter(l => l.fit_score >= 50 && l.website)
-      : scoredLeads.filter(l => l.fit_score >= 50 && l.website);
+      ? scoredLeads.filter(l => l.fit_score >= 30 && l.website)
+      : scoredLeads.filter(l => l.fit_score >= 30 && l.website);
 
     console.log(`   ${scoredLeads.filter(l => l.fit_score >= 50).length} above threshold, ${enrichmentCandidates.length} have websites for enrichment`);
 
@@ -201,7 +201,7 @@ const runCampaign = async (rawClient) => {
     // qualify_without_contact=false (default): require website OR phone OR email
     const qualifiedLeads = enrichedLeads
       .filter(l => {
-        if (l.fit_score < 50) return false;
+        if (l.fit_score < 30) return false;
         if (client.qualify_without_contact) return true;
         return l.website || l.phone || l.email;
       })
