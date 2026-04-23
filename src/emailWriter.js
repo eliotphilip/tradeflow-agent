@@ -190,7 +190,7 @@ const buildSimilarClientContext = (similarClientProfile) => {
     });
   }
 
-  lines.push('Use this to assess similarity: does this lead resemble the kind of business this client already works with?');
+  lines.push('IMPORTANT: Set similar_client_match=true if this lead closely resembles any of the example businesses above — same sector, same type of work, or same kind of client relationship. Be generous — partial match is enough.');
   return lines.join('\n');
 };
 
@@ -277,6 +277,7 @@ Return ONLY valid JSON, double quotes only, no text before or after the JSON obj
   "fit_score": 0,
   "fit_reason": "max 10 words",
   "matches_perfect_lead_def": false,
+  "similar_client_match": false,
   "is_startup": false
 }`;
 
@@ -295,11 +296,11 @@ Return ONLY valid JSON, double quotes only, no text before or after the JSON obj
 
     const result = JSON.parse(text);
 
-    // Determine similar_client_match deterministically in code —
-    // more reliable than asking Haiku to judge similarity
+    // Primary: Haiku's judgement from the scoring prompt
+    // Fallback: deterministic container type match if Haiku returned false
     const similarContainers = client.similar_client_profile?.container_type_hints ?? [];
-    const similarClientMatch = similarContainers.length > 0 &&
-      similarContainers.includes(lead.container_type);
+    const deterministicMatch = similarContainers.includes(lead.container_type);
+    const similarClientMatch = result.similar_client_match || deterministicMatch;
 
     return {
       fit_score: Math.max(0, Math.min(100, (result.fit_score || 0) * 10)),
