@@ -153,6 +153,24 @@ const buildRecipientContext = (lead) => {
   return lines.join('\n');
 };
 
+const buildSimilarClientContext = (similarClientProfile) => {
+  if (!similarClientProfile) return '';
+
+  const lines = ['\n# SIMILAR CLIENT PROFILE (businesses this client already works with)'];
+  lines.push(`Sectors: ${similarClientProfile.sectors?.join(', ') || 'unknown'}`);
+  lines.push(`Keywords: ${similarClientProfile.keywords?.join(', ') || 'none'}`);
+
+  if (similarClientProfile.examples?.length) {
+    lines.push('Example existing clients:');
+    similarClientProfile.examples.forEach(e => {
+      if (e.what_they_do) lines.push(`- ${e.name || e.url}: ${e.what_they_do}`);
+    });
+  }
+
+  lines.push('Use this to assess similarity: does this lead resemble the kind of business this client already works with?');
+  return lines.join('\n');
+};
+
 const buildFeedbackExamples = (approved, archived) => {
   if (!approved?.length && !archived?.length) return '';
   let examples = '\n# CALIBRATION FROM PREVIOUS CAMPAIGNS\n';
@@ -180,6 +198,7 @@ export const scoreLead = async (client, lead, previousApprovedLeads = [], previo
     const container = containers[lead.container_type] || null;
     const containerRubric = buildContainerRubric(container);
     const feedbackExamples = buildFeedbackExamples(previousApprovedLeads, previousArchivedLeads);
+    const similarClientContext = buildSimilarClientContext(client.similar_client_profile);
 
     const enrichmentContext = lead.enrichment_data ? `
 # ENRICHED WEBSITE DATA
@@ -200,6 +219,7 @@ export const scoreLead = async (client, lead, previousApprovedLeads = [], previo
 - Disqualifiers: ${sanitize(client.disqualifiers) || 'None'}
 - Volume vs precision (1=volume 5=precision): ${client.volume_vs_precision || 3}
 ${feedbackExamples}
+${similarClientContext}
 
 # CONTAINER RUBRIC
 ${containerRubric}
@@ -218,6 +238,7 @@ SCORING RULES:
 - Score 0-10, show your math
 - Apply disqualifiers absolutely
 - Check against perfect lead definition
+- If similar client profile is provided, add +1 to score if this lead closely resembles those examples
 
 Priority mapping for volume_vs_precision=${client.volume_vs_precision || 3}:
 - 1-2: hot=7+, warm=4-6, cold=2-3, pass=0-1
@@ -231,7 +252,8 @@ Return ONLY valid JSON, double quotes only:
   "priority": "hot|warm|cold|pass",
   "top_signals": [],
   "disqualifiers_found": [],
-  "matches_perfect_lead_def": false
+  "matches_perfect_lead_def": false,
+  "similar_client_match": false
 }`;
 
     const response = await anthropic.messages.create({
@@ -251,6 +273,7 @@ Return ONLY valid JSON, double quotes only:
       fit_score: Math.max(0, Math.min(100, (result.fit_score || 0) * 10)),
       fit_reason: result.fit_reason || 'No reason provided',
       matches_perfect_lead_def: result.matches_perfect_lead_def || false,
+      similar_client_match: result.similar_client_match || false,
     };
 
   } catch (err) {
@@ -258,7 +281,12 @@ Return ONLY valid JSON, double quotes only:
     let score = 40;
     if (lead.website) score += 10;
     if (lead.enrichment_data) score += 10;
-    return { fit_score: score, fit_reason: 'Fallback scoring used', matches_perfect_lead_def: false };
+    return {
+      fit_score: score,
+      fit_reason: 'Fallback scoring used',
+      matches_perfect_lead_def: false,
+      similar_client_match: false,
+    };
   }
 };
 
